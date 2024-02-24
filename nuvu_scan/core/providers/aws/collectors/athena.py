@@ -4,22 +4,24 @@ Amazon Athena collector.
 Collects Athena workgroups and query history.
 """
 
-import boto3
-from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+from typing import Any
+
+import boto3
 from botocore.exceptions import ClientError
+
 from nuvu_scan.core.base import Asset, NormalizedCategory
 
 
 class AthenaCollector:
     """Collects Amazon Athena resources."""
 
-    def __init__(self, session: boto3.Session, regions: Optional[List[str]] = None):
+    def __init__(self, session: boto3.Session, regions: list[str] | None = None):
         self.session = session
         self.regions = regions or ["us-east-1"]
         self.athena_client = session.client("athena", region_name="us-east-1")
 
-    def collect(self) -> List[Asset]:
+    def collect(self) -> list[Asset]:
         """Collect Athena workgroups."""
         assets = []
 
@@ -33,7 +35,7 @@ class AthenaCollector:
                 try:
                     # Get workgroup details
                     wg_details = self.athena_client.get_work_group(WorkGroup=wg_name)
-                    config = wg_details.get("WorkGroup", {}).get("Configuration", {})
+                    wg_details.get("WorkGroup", {}).get("Configuration", {})
 
                     # Get query statistics
                     query_stats = self._get_query_stats(wg_name)
@@ -74,14 +76,14 @@ class AthenaCollector:
 
         return assets
 
-    def _get_query_stats(self, workgroup_name: str) -> Dict[str, Any]:
+    def _get_query_stats(self, workgroup_name: str) -> dict[str, Any]:
         """Get query statistics for a workgroup."""
         stats = {"total_queries": 0, "failed_queries": 0, "last_query_time": None, "idle_days": 0}
 
         try:
             # List recent queries
             paginator = self.athena_client.get_paginator("list_query_executions")
-            cutoff_date = datetime.utcnow() - timedelta(days=90)
+            datetime.utcnow() - timedelta(days=90)
 
             for page in paginator.paginate(WorkGroup=workgroup_name):
                 for query_id in page.get("QueryExecutionIds", []):
@@ -120,7 +122,7 @@ class AthenaCollector:
 
         return stats
 
-    def get_usage_metrics(self, asset: Asset) -> Dict[str, Any]:
+    def get_usage_metrics(self, asset: Asset) -> dict[str, Any]:
         """Get usage metrics for Athena workgroup."""
         return asset.usage_metrics or {}
 

@@ -4,16 +4,18 @@ AWS provider scanner implementation.
 Implements CloudProviderScan interface for AWS cloud provider.
 """
 
+from typing import Any
+
 import boto3
-from typing import List, Dict, Any
-from datetime import datetime, timedelta
-from nuvu_scan.core.base import CloudProviderScan, Asset, ScanConfig, NormalizedCategory
+
+from nuvu_scan.core.base import Asset, CloudProviderScan, ScanConfig
+
+from .collectors.athena import AthenaCollector
+from .collectors.glue import GlueCollector
+from .collectors.redshift import RedshiftCollector
 
 # Import collectors
 from .collectors.s3 import S3Collector
-from .collectors.glue import GlueCollector
-from .collectors.athena import AthenaCollector
-from .collectors.redshift import RedshiftCollector
 
 
 class AWSScanner(CloudProviderScan):
@@ -40,7 +42,7 @@ class AWSScanner(CloudProviderScan):
             # Use default credentials (environment, IAM role, etc.)
             return boto3.Session()
 
-    def _initialize_collectors(self) -> List:
+    def _initialize_collectors(self) -> list:
         """Initialize all AWS service collectors."""
         collectors = []
 
@@ -58,7 +60,7 @@ class AWSScanner(CloudProviderScan):
 
         return collectors
 
-    def list_assets(self) -> List[Asset]:
+    def list_assets(self) -> list[Asset]:
         """Discover all AWS assets across all collectors."""
         all_assets = []
 
@@ -73,7 +75,7 @@ class AWSScanner(CloudProviderScan):
 
         return all_assets
 
-    def get_usage_metrics(self, asset: Asset) -> Dict[str, Any]:
+    def get_usage_metrics(self, asset: Asset) -> dict[str, Any]:
         """Get usage metrics for an AWS asset."""
         # Delegate to appropriate collector based on service
         for collector in self.collectors:

@@ -4,16 +4,15 @@ Scan command for Nuvu CLI.
 
 import os
 import sys
-import click
-import json
 from datetime import datetime
-from typing import Optional
 
-from ...core import CloudProviderScan, ScanConfig
+import click
+
+from ...core import ScanConfig
 from ...core.providers.aws import AWSScanner
+from ..formatters.csv import CSVFormatter
 from ..formatters.html import HTMLFormatter
 from ..formatters.json import JSONFormatter
-from ..formatters.csv import CSVFormatter
 
 
 @click.command(name="scan")
@@ -53,11 +52,11 @@ from ..formatters.csv import CSVFormatter
 def scan_command(
     provider: str,
     output_format: str,
-    output_file: Optional[str],
+    output_file: str | None,
     region: tuple,
-    access_key_id: Optional[str],
-    secret_access_key: Optional[str],
-    profile: Optional[str],
+    access_key_id: str | None,
+    secret_access_key: str | None,
+    profile: str | None,
 ):
     """Scan cloud provider for data assets."""
 

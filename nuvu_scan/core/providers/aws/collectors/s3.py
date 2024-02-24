@@ -4,23 +4,24 @@ S3 bucket collector.
 Collects S3 buckets, their metadata, usage, and cost estimates.
 """
 
+from typing import Any
+
 import boto3
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
+
 from nuvu_scan.core.base import Asset, NormalizedCategory
 
 
 class S3Collector:
     """Collects S3 buckets and their metadata."""
 
-    def __init__(self, session: boto3.Session, regions: Optional[List[str]] = None):
+    def __init__(self, session: boto3.Session, regions: list[str] | None = None):
         self.session = session
         self.regions = regions or []
         self.s3_client = session.client("s3")
         self.s3_resource = session.resource("s3")
 
-    def collect(self) -> List[Asset]:
+    def collect(self) -> list[Asset]:
         """Collect all S3 buckets."""
         assets = []
 
@@ -102,7 +103,7 @@ class S3Collector:
 
         return assets
 
-    def _get_bucket_tags(self, bucket_name: str) -> Dict[str, str]:
+    def _get_bucket_tags(self, bucket_name: str) -> dict[str, str]:
         """Get tags for a bucket."""
         try:
             response = self.s3_client.get_bucket_tagging(Bucket=bucket_name)
@@ -130,7 +131,7 @@ class S3Collector:
             except ClientError:
                 return False
 
-    def _get_storage_info(self, bucket) -> Dict[str, Any]:
+    def _get_storage_info(self, bucket) -> dict[str, Any]:
         """Get storage information for a bucket."""
         total_size = 0
         object_count = 0
@@ -157,7 +158,7 @@ class S3Collector:
             "storage_classes": storage_classes,
         }
 
-    def _get_last_activity(self, bucket_name: str) -> Optional[str]:
+    def _get_last_activity(self, bucket_name: str) -> str | None:
         """Get last activity timestamp for a bucket."""
         # This is approximate - S3 doesn't provide direct last access time
         # We can check CloudTrail logs or use bucket metrics
@@ -182,7 +183,7 @@ class S3Collector:
         bucket_lower = bucket_name.lower()
         return any(keyword in bucket_lower for keyword in pii_keywords)
 
-    def _infer_ownership(self, tags: Dict[str, str], bucket_name: str) -> Dict[str, str]:
+    def _infer_ownership(self, tags: dict[str, str], bucket_name: str) -> dict[str, str]:
         """Infer ownership from tags or naming."""
         owner = None
         confidence = "unknown"
@@ -200,14 +201,13 @@ class S3Collector:
 
         return {"owner": owner, "confidence": confidence}
 
-    def get_usage_metrics(self, asset: Asset) -> Dict[str, Any]:
+    def get_usage_metrics(self, asset: Asset) -> dict[str, Any]:
         """Get detailed usage metrics for an S3 bucket."""
-        bucket_name = asset.name
         metrics = asset.usage_metrics.copy() if asset.usage_metrics else {}
 
         # Try to get CloudWatch metrics for last access
         try:
-            cloudwatch = self.session.client("cloudwatch")
+            self.session.client("cloudwatch")
             # S3 doesn't have direct last access metrics, but we can check request metrics
             # This is a simplified version
             pass

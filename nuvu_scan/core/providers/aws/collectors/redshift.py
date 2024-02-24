@@ -4,21 +4,22 @@ Amazon Redshift collector.
 Collects Redshift clusters and serverless namespaces.
 """
 
+from typing import Any
+
 import boto3
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
+
 from nuvu_scan.core.base import Asset, NormalizedCategory
 
 
 class RedshiftCollector:
     """Collects Amazon Redshift resources."""
 
-    def __init__(self, session: boto3.Session, regions: Optional[List[str]] = None):
+    def __init__(self, session: boto3.Session, regions: list[str] | None = None):
         self.session = session
         self.regions = regions or []
 
-    def collect(self) -> List[Asset]:
+    def collect(self) -> list[Asset]:
         """Collect Redshift clusters and serverless namespaces."""
         assets = []
 
@@ -30,7 +31,7 @@ class RedshiftCollector:
 
         return assets
 
-    def _collect_clusters(self) -> List[Asset]:
+    def _collect_clusters(self) -> list[Asset]:
         """Collect provisioned Redshift clusters."""
         assets = []
 
@@ -92,7 +93,7 @@ class RedshiftCollector:
 
         return assets
 
-    def _collect_serverless(self) -> List[Asset]:
+    def _collect_serverless(self) -> list[Asset]:
         """Collect Redshift Serverless namespaces."""
         assets = []
 
@@ -165,7 +166,7 @@ class RedshiftCollector:
         base_cost = pricing.get(node_type, 500.0)  # Default estimate
         return base_cost * node_count
 
-    def get_usage_metrics(self, asset: Asset) -> Dict[str, Any]:
+    def get_usage_metrics(self, asset: Asset) -> dict[str, Any]:
         """Get usage metrics for Redshift asset."""
         return asset.usage_metrics or {}
 

@@ -6,9 +6,9 @@ implement the same scanning contract, enabling provider-agnostic usage.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class NormalizedCategory(str, Enum):
@@ -37,16 +37,16 @@ class Asset:
     region: str  # Normalized region/zone
     arn: str  # Provider-specific resource identifier
     name: str
-    created_at: Optional[str] = None
-    last_activity_at: Optional[str] = None
-    size_bytes: Optional[int] = None
-    tags: Dict[str, str] = None
-    cost_estimate_usd: Optional[float] = None
-    usage_metrics: Dict[str, Any] = None
-    risk_flags: List[str] = None
+    created_at: str | None = None
+    last_activity_at: str | None = None
+    size_bytes: int | None = None
+    tags: dict[str, str] = None
+    cost_estimate_usd: float | None = None
+    usage_metrics: dict[str, Any] = None
+    risk_flags: list[str] = None
     ownership_confidence: str = "unknown"  # high, medium, unknown
-    suggested_owner: Optional[str] = None
-    underlying_cloud_account_id: Optional[str] = None  # For Databricks
+    suggested_owner: str | None = None
+    underlying_cloud_account_id: str | None = None  # For Databricks
 
     def __post_init__(self):
         if self.tags is None:
@@ -62,9 +62,9 @@ class ScanConfig:
     """Configuration for scanning a cloud provider."""
 
     provider: str
-    credentials: Dict[str, Any]  # Provider-specific credentials
-    regions: List[str] = None  # None means all regions
-    account_id: Optional[str] = None
+    credentials: dict[str, Any]  # Provider-specific credentials
+    regions: list[str] = None  # None means all regions
+    account_id: str | None = None
 
     def __post_init__(self):
         if self.regions is None:
@@ -78,9 +78,9 @@ class ScanResult:
     provider: str
     account_id: str
     scan_timestamp: str
-    assets: List[Asset]
+    assets: list[Asset]
     total_cost_estimate_usd: float
-    summary: Dict[str, Any] = None
+    summary: dict[str, Any] = None
 
     def __post_init__(self):
         if self.summary is None:
@@ -100,7 +100,7 @@ class CloudProviderScan(ABC):
         self.provider = config.provider
 
     @abstractmethod
-    def list_assets(self) -> List[Asset]:
+    def list_assets(self) -> list[Asset]:
         """
         Discover and list all assets in the cloud provider.
 
@@ -110,7 +110,7 @@ class CloudProviderScan(ABC):
         pass
 
     @abstractmethod
-    def get_usage_metrics(self, asset: Asset) -> Dict[str, Any]:
+    def get_usage_metrics(self, asset: Asset) -> dict[str, Any]:
         """
         Get usage metrics for a specific asset.
 
@@ -175,7 +175,7 @@ class CloudProviderScan(ABC):
             summary=summary,
         )
 
-    def _build_summary(self, assets: List[Asset]) -> Dict[str, Any]:
+    def _build_summary(self, assets: list[Asset]) -> dict[str, Any]:
         """Build summary statistics from assets."""
         total_assets = len(assets)
         assets_by_category = {}

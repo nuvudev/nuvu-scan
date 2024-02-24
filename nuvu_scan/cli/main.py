@@ -5,8 +5,8 @@ Usage:
     nuvu scan --provider aws
 """
 
-import sys
 import click
+
 from .commands.scan import scan_command
 
 

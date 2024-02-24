@@ -4,21 +4,23 @@ AWS Glue Data Catalog collector.
 Collects Glue databases, tables, and jobs.
 """
 
+from typing import Any
+
 import boto3
-from typing import List, Dict, Any, Optional
 from botocore.exceptions import ClientError
+
 from nuvu_scan.core.base import Asset, NormalizedCategory
 
 
 class GlueCollector:
     """Collects AWS Glue Data Catalog resources."""
 
-    def __init__(self, session: boto3.Session, regions: Optional[List[str]] = None):
+    def __init__(self, session: boto3.Session, regions: list[str] | None = None):
         self.session = session
         self.regions = regions or ["us-east-1"]  # Glue is regional but catalog is global
         self.glue_client = session.client("glue", region_name="us-east-1")
 
-    def collect(self) -> List[Asset]:
+    def collect(self) -> list[Asset]:
         """Collect Glue databases and tables."""
         assets = []
 
@@ -99,7 +101,7 @@ class GlueCollector:
 
         return assets
 
-    def _get_tags(self, resource_arn: str) -> Dict[str, str]:
+    def _get_tags(self, resource_arn: str) -> dict[str, str]:
         """Get tags for a Glue resource."""
         try:
             # Glue uses get_tags API
@@ -108,7 +110,7 @@ class GlueCollector:
         except ClientError:
             return {}
 
-    def _infer_ownership(self, tags: Dict[str, str], name: str) -> Dict[str, str]:
+    def _infer_ownership(self, tags: dict[str, str], name: str) -> dict[str, str]:
         """Infer ownership from tags."""
         owner = None
         confidence = "unknown"
@@ -122,7 +124,7 @@ class GlueCollector:
 
         return {"owner": owner, "confidence": confidence}
 
-    def get_usage_metrics(self, asset: Asset) -> Dict[str, Any]:
+    def get_usage_metrics(self, asset: Asset) -> dict[str, Any]:
         """Get usage metrics for Glue asset."""
         return asset.usage_metrics or {}
 
