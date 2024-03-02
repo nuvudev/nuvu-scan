@@ -159,11 +159,86 @@ class S3Collector:
         }
 
     def _get_last_activity(self, bucket_name: str) -> str | None:
-        """Get last activity timestamp for a bucket."""
-        # This is approximate - S3 doesn't provide direct last access time
-        # We can check CloudTrail logs or use bucket metrics
-        # For now, return None (will be marked as unused)
+        """Get last activity timestamp for a bucket from CloudTrail or CloudWatch."""
+        from datetime import datetime, timedelta
+
+        try:
+            # Try CloudTrail to find last API call to this bucket
+            cloudtrail_client = self.session.client("cloudtrail", region_name="us-east-1")
+
+            # Look for S3 API calls in the last 90 days
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(days=90)
+
+            try:
+                response = cloudtrail_client.lookup_events(
+                    LookupAttributes=[
+                        {"AttributeKey": "ResourceName", "AttributeValue": bucket_name},
+                    ],
+                    StartTime=start_time,
+                    EndTime=end_time,
+                    MaxResults=1,  # Just need the most recent
+                )
+
+                events = response.get("Events", [])
+                if events:
+                    # Get the most recent event
+                    latest_event = max(events, key=lambda x: x.get("EventTime", datetime.min))
+                    event_time = latest_event.get("EventTime")
+                    if event_time:
+                        return event_time.isoformat()
+
+            except Exception:
+                # CloudTrail might not be available or no events found
+                pass
+
+            # Fallback: Try CloudWatch metrics for bucket requests
+            try:
+                cloudwatch_client = self.session.client("cloudwatch")
+                # Check for GetObject, PutObject, ListBucket requests in last 30 days
+                end_time_cw = datetime.utcnow()
+                start_time_cw = end_time_cw - timedelta(days=30)
+
+                metrics = cloudwatch_client.get_metric_statistics(
+                    Namespace="AWS/S3",
+                    MetricName="NumberOfObjects",
+                    Dimensions=[{"Name": "BucketName", "Value": bucket_name}],
+                    StartTime=start_time_cw,
+                    EndTime=end_time_cw,
+                    Period=86400,  # 1 day
+                    Statistics=["SampleCount"],
+                )
+
+                datapoints = metrics.get("Datapoints", [])
+                if datapoints:
+                    # Get the most recent datapoint
+                    latest_point = max(datapoints, key=lambda x: x.get("Timestamp", datetime.min))
+                    timestamp = latest_point.get("Timestamp")
+                    if timestamp:
+                        return timestamp.isoformat()
+
+            except Exception:
+                # CloudWatch might not have metrics or no access
+                pass
+
+        except Exception:
+            pass
+
         return None
+
+    def _calculate_days_since_last_use(self, last_activity: str | None) -> int | None:
+        """Calculate days since last use."""
+        from datetime import datetime
+
+        if not last_activity:
+            return None
+
+        try:
+            last_used = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
+            days = (datetime.utcnow() - last_used.replace(tzinfo=None)).days
+            return days
+        except Exception:
+            return None
 
     def _has_pii_naming(self, bucket_name: str) -> bool:
         """Check if bucket name suggests PII data."""
@@ -218,22 +293,18 @@ class S3Collector:
 
     def get_cost_estimate(self, asset: Asset) -> float:
         """Estimate monthly cost for S3 bucket."""
-        if not asset.size_bytes:
-            return 0.0
-
         # S3 pricing (approximate, as of 2024)
         # Standard: $0.023 per GB/month
         # Standard-IA: $0.0125 per GB/month
         # Glacier: $0.004 per GB/month
         # Glacier Deep Archive: $0.00099 per GB/month
-
-        size_gb = asset.size_bytes / (1024**3)
+        # Plus: PUT/GET requests, data transfer, etc.
 
         # Get storage class distribution
         storage_classes = asset.usage_metrics.get("storage_class_distribution", {})
 
-        if not storage_classes:
-            # Default to Standard if unknown
+        if not storage_classes and asset.size_bytes:
+            # Default to Standard if unknown but has data
             storage_classes = {"STANDARD": asset.size_bytes}
 
         total_cost = 0.0
@@ -245,9 +316,22 @@ class S3Collector:
             "INTELLIGENT_TIERING": 0.023,  # Base tier
         }
 
+        # Calculate storage cost
         for storage_class, size_bytes in storage_classes.items():
-            size_gb = size_bytes / (1024**3)
-            price_per_gb = pricing.get(storage_class, 0.023)
-            total_cost += size_gb * price_per_gb
+            if size_bytes > 0:
+                size_gb = size_bytes / (1024**3)
+                price_per_gb = pricing.get(storage_class, 0.023)
+                total_cost += size_gb * price_per_gb
+
+        # Add request costs (PUT/GET requests)
+        # S3 charges $0.005 per 1,000 PUT requests and $0.0004 per 1,000 GET requests
+        # We don't have request counts, so we estimate based on object count
+        object_count = asset.usage_metrics.get("object_count", 0)
+        if object_count > 0:
+            # Rough estimate: assume some GET requests per object per month
+            # This is a conservative estimate
+            estimated_get_requests = object_count * 10  # Assume 10 GETs per object per month
+            get_cost = (estimated_get_requests / 1000) * 0.0004
+            total_cost += get_cost
 
         return total_cost

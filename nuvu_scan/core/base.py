@@ -24,6 +24,7 @@ class NormalizedCategory(str, Enum):
     QUERY_ENGINE = "query_engine"
     SEARCH = "search"
     DATABASE = "database"
+    SECURITY = "security"
 
 
 @dataclass

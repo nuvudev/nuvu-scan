@@ -1,6 +1,27 @@
 # Nuvu Scan
 
-Multi-Cloud Data Asset Control CLI - Discover and analyze your cloud data infrastructure across AWS, GCP, Azure, and Databricks.
+**Take Control of Your Cloud Data Estate**  
+Discover, govern, and optimize your cloud data assets across **AWS and GCP** — reduce wasted spend, enforce compliance, and gain full visibility into unused, idle, or risky resources.
+
+---
+
+## Why Nuvu Scan?
+
+Cloud data estates grow fast, and without visibility, organizations face:
+
+- **Wasted cloud spend**: Idle storage, orphaned databases, and underutilized clusters cost millions.
+- **Security & compliance gaps**: Public buckets, exposed PII, and misconfigured permissions.
+- **Operational confusion**: Who owns which assets? Which datasets are stale or unused?
+
+**Nuvu Scan solves these problems by giving you:**
+
+- **Full Asset Visibility**: Discover every bucket, table, cluster, and service across your cloud accounts.
+- **Cost Insights**: Identify idle or orphaned resources and quantify their impact on your cloud bill.
+- **Automated Risk Detection**: Highlight security risks, compliance issues, and PII exposure.
+- **Ownership Tracking**: Infer owners from metadata to enforce accountability.
+- **Actionable Reporting**: Generate reports in HTML, CSV, or JSON to share with your team or integrate into workflows.
+
+---
 
 ## Installation
 
@@ -9,6 +30,10 @@ pip install nuvu-scan
 ```
 
 ## Usage
+
+### AWS Scanning
+
+**Prerequisites:** Create an IAM user or role with the read-only policy from `aws-iam-policy.json`. See the [AWS Setup](#aws-v1---available-now) section below for detailed instructions.
 
 ```bash
 # Scan AWS account (uses default credentials)
@@ -26,12 +51,30 @@ nuvu scan --provider aws --output-format json --output-file report.json
 nuvu scan --provider aws --region us-east-1 --region eu-west-1
 ```
 
+### GCP Scanning
+
+```bash
+# Scan GCP project (uses GOOGLE_APPLICATION_CREDENTIALS environment variable)
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+nuvu scan --provider gcp --gcp-project your-project-id
+
+# Or specify credentials file directly
+nuvu scan --provider gcp --gcp-credentials /path/to/service-account-key.json --gcp-project your-project-id
+
+# Output to JSON
+nuvu scan --provider gcp --gcp-project your-project-id --output-format json --output-file gcp-report.json
+```
+
 ## Features
 
-- **Asset Discovery**: Automatically discovers S3 buckets, Glue databases/tables, Athena workgroups, Redshift clusters, and more
-- **Cost Estimation**: Estimates monthly costs for all discovered assets
+- **Asset Discovery**: Automatically discovers cloud data assets:
+  - **AWS**: S3 buckets, Glue databases/tables, Athena workgroups, Redshift clusters, and more
+  - **GCP**: GCS buckets, BigQuery datasets/tables, Dataproc clusters, Pub/Sub topics, and more
+- **Cost Estimation**: Estimates monthly costs for all discovered assets (in USD)
+  - **AWS**: Includes actual costs from AWS Cost Explorer API. Note: Some costs shown may be for services that are not data assets (e.g., domain registration, email services, DNS). Individual asset costs are estimates based on resource usage.
+  - **GCP**: Estimates based on resource usage and actual costs from Cloud Billing API where available
 - **Risk Detection**: Flags public access, PII exposure, and other security risks
-- **Ownership Inference**: Attempts to identify asset owners from tags and metadata
+- **Ownership Inference**: Attempts to identify asset owners from tags, labels, and metadata
 - **Multiple Output Formats**: HTML (default), JSON, and CSV reports
 
 ## Output Formats
@@ -45,16 +88,100 @@ nuvu scan --provider aws --region us-east-1 --region eu-west-1
 ### AWS (v1 - Available Now)
 Nuvu requires read-only access to your AWS account. The tool uses the following AWS services:
 
-- S3 (list buckets, get bucket metadata)
-- Glue (list databases, tables)
-- Athena (list workgroups, query history)
-- Redshift (describe clusters, namespaces)
-- CloudWatch (metrics)
-- CloudTrail (audit logs)
+- **S3**: List buckets, get bucket metadata, check public access
+- **Glue**: List databases and tables
+- **Athena**: List workgroups and query history
+- **Redshift**: Describe clusters and serverless namespaces
+- **IAM**: List roles and policies (for data-access permission analysis)
+- **MWAA**: List Managed Workflows for Apache Airflow environments
+- **CloudWatch**: Get metrics for usage tracking
+- **CloudTrail**: Lookup events for last activity detection
+- **Cost Explorer**: Get cost and usage data (optional, for actual cost reporting)
 
-See the [IAM Policy Documentation](IAM_POLICY.md) for the exact permissions required.
+**Setting Up IAM Credentials:**
 
-### GCP, Azure, Databricks (Coming Soon)
+1. **Create an IAM User or Role** with the read-only policy:
+   ```bash
+   # Option 1: Create IAM user
+   aws iam create-user --user-name nuvu-scan-readonly
+   
+   # Option 2: Create IAM role (for EC2/ECS/Lambda)
+   aws iam create-role --role-name nuvu-scan-readonly --assume-role-policy-document file://trust-policy.json
+   ```
+
+2. **Attach the IAM Policy**:
+   ```bash
+   # For IAM user
+   aws iam put-user-policy --user-name nuvu-scan-readonly --policy-name NuvuScanReadOnly --policy-document file://aws-iam-policy.json
+   
+   # For IAM role
+   aws iam put-role-policy --role-name nuvu-scan-readonly --policy-name NuvuScanReadOnly --policy-document file://aws-iam-policy.json
+   ```
+
+3. **Create Access Keys** (for IAM user only):
+   ```bash
+   aws iam create-access-key --user-name nuvu-scan-readonly
+   ```
+
+4. **Use the credentials**:
+   ```bash
+   export AWS_ACCESS_KEY_ID=your-access-key-id
+   export AWS_SECRET_ACCESS_KEY=your-secret-access-key
+   nuvu scan --provider aws
+   ```
+
+The IAM policy file (`aws-iam-policy.json`) is included in this repository and contains all the read-only permissions required by Nuvu Scan. This policy follows the principle of least privilege and only grants read-only access to the services needed for scanning.
+
+### GCP (v2 - Available Now)
+Nuvu requires read-only access to your GCP project via a Service Account. The tool uses the following GCP services:
+
+- **Cloud Storage (GCS)**: List buckets, get bucket metadata, IAM policies
+- **BigQuery**: List datasets/tables, query history, job information
+- **Dataproc**: List clusters, job history
+- **Pub/Sub**: List topics and subscriptions
+
+**Required IAM Roles:**
+- `roles/storage.objectViewer` - For Cloud Storage
+- `roles/bigquery.dataViewer` + `roles/bigquery.jobUser` - For BigQuery
+- `roles/dataproc.viewer` - For Dataproc
+- `roles/pubsub.subscriber` - For Pub/Sub
+- `roles/serviceusage.serviceUsageViewer` - For checking API status (Gemini, etc.)
+
+**Optional (for actual costs):**
+- Enable BigQuery billing export for automatic cost tracking
+- Or grant `roles/billing.billingAccountViewer` for Cloud Billing API access
+
+**Setup Instructions:**
+
+1. **Create a Service Account:**
+   - Go to [GCP Console → IAM & Admin → Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
+   - Create a new service account (e.g., `nuvu-scan-readonly`)
+   - Attach the read-only roles listed above
+
+2. **Create and Download JSON Key:**
+   - Click on the service account → "Keys" tab
+   - Click "Add Key" → "Create new key" → Select "JSON"
+   - Download the JSON key file
+
+3. **Enable Required APIs:**
+   - Cloud Storage API
+   - BigQuery API
+   - Dataproc API
+   - Pub/Sub API
+
+4. **Test the Scan:**
+   ```bash
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+   nuvu scan --provider gcp --gcp-project your-project-id
+   ```
+
+5. **Optional: Enable Automatic Cost Tracking:**
+   To get actual costs for services like Gemini API, enable BigQuery billing export:
+   - Go to [GCP Console → Billing → Billing Export](https://console.cloud.google.com/billing/export)
+   - Enable BigQuery export
+   - Costs will be automatically retrieved from the billing export
+
+### Azure, Databricks (Coming Soon)
 Multi-cloud support is built into the architecture. Additional providers will be added in future releases.
 
 ## License
@@ -140,6 +267,35 @@ uv pip install -e .
 nuvu scan --provider aws
 ```
 
+### Testing GCP Scanning
+
+To test GCP scanning with your credentials:
+
+```bash
+# Set up GCP credentials
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+
+# Run GCP scan
+uv run nuvu scan --provider gcp --gcp-project your-project-id
+
+# Or specify credentials file directly
+uv run nuvu scan --provider gcp \
+  --gcp-credentials /path/to/service-account-key.json \
+  --gcp-project your-project-id
+
+# Output to JSON for inspection
+uv run nuvu scan --provider gcp \
+  --gcp-project your-project-id \
+  --output-format json \
+  --output-file gcp-scan-results.json
+```
+
+**Troubleshooting:**
+
+- **Permission Denied**: Ensure the service account has the required IAM roles listed above
+- **API Not Enabled**: Enable the required APIs in [GCP Console → APIs & Services](https://console.cloud.google.com/apis/library)
+- **Project ID Not Found**: Verify the project ID matches your service account's project
+
 ## Contributing
 
 We welcome contributions! Here's how to get started:
@@ -194,28 +350,28 @@ git push origin feature/your-feature-name
 
 ### Adding a New Cloud Provider
 
-To add support for a new cloud provider (e.g., GCP):
+To add support for a new cloud provider (e.g., Azure):
 
 1. **Create provider module structure:**
    ```bash
-   mkdir -p nuvu_scan/core/providers/gcp/collectors
+   mkdir -p nuvu_scan/core/providers/azure/collectors
    ```
 
 2. **Implement CloudProviderScan interface:**
-   - Create `nuvu_scan/core/providers/gcp/gcp_scanner.py`
+   - Create `nuvu_scan/core/providers/azure/azure_scanner.py`
    - Inherit from `CloudProviderScan`
    - Implement `list_assets()`, `get_usage_metrics()`, `get_cost_estimate()`
 
 3. **Create service collectors:**
-   - One collector per service (e.g., `gcs.py`, `bigquery.py`)
-   - Follow the pattern from AWS collectors
+   - One collector per service (e.g., `blob_storage.py`, `synapse.py`)
+   - Follow the pattern from AWS/GCP collectors
 
 4. **Register in CLI:**
-   - Update `nuvu_scan/cli/commands/scan.py` to support `--provider gcp`
+   - Update `nuvu_scan/cli/commands/scan.py` to support `--provider azure`
    - Add provider to choices
 
 5. **Add tests:**
-   - Create tests in `tests/providers/gcp/`
+   - Create tests in `tests/providers/azure/`
    - Mock API responses
 
 6. **Update documentation:**
@@ -231,7 +387,9 @@ nuvu-scan/
 │   │   ├── base.py         # CloudProviderScan interface
 │   │   ├── providers/       # Provider implementations
 │   │   │   ├── aws/        # AWS provider (v1)
-│   │   │   ├── gcp/        # GCP provider (future)
+│   │   │   │   └── collectors/  # S3, Glue, Athena, Redshift
+│   │   │   ├── gcp/        # GCP provider (v2)
+│   │   │   │   └── collectors/  # GCS, BigQuery, Dataproc, Pub/Sub
 │   │   │   └── azure/      # Azure provider (future)
 │   │   └── models/         # Data models
 │   └── cli/                # CLI interface
@@ -273,7 +431,7 @@ The project uses GitHub Actions for:
 
 - **CI** (`.github/workflows/ci.yml`):
   - Runs on every push and PR
-  - Tests on Python 3.8-3.12
+  - Tests on Python 3.10-3.13
   - Runs linters (ruff, black)
   - Runs type checker (mypy)
   - Runs test suite
