@@ -111,7 +111,9 @@ class GCPScanner(CloudProviderScan):
                         f"INFO: {collector.__class__.__name__} - API not enabled (this is normal if you don't use this service)",
                         file=sys.stderr,
                     )
-                elif "403" in error_str or "Permission" in error_str or "denied" in error_str.lower():
+                elif (
+                    "403" in error_str or "Permission" in error_str or "denied" in error_str.lower()
+                ):
                     # Permission error - this is a real issue
                     print(
                         f"ERROR: {collector.__class__.__name__} - Permission denied: {type(e).__name__}: {e}",

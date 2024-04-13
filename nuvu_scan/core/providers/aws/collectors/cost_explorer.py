@@ -16,7 +16,9 @@ class CostExplorerCollector:
     def __init__(self, session: boto3.Session, regions: list[str] | None = None):
         self.session = session
         self.regions = regions or []
-        self.cost_explorer_client = session.client("ce", region_name="us-east-1")  # Cost Explorer is global
+        self.cost_explorer_client = session.client(
+            "ce", region_name="us-east-1"
+        )  # Cost Explorer is global
 
     def get_service_costs(self, start_date: datetime, end_date: datetime) -> dict[str, float]:
         """Get costs by service for a date range."""
@@ -40,7 +42,9 @@ class CostExplorerCollector:
             for result in response.get("ResultsByTime", []):
                 for group in result.get("Groups", []):
                     service = group.get("Keys", [""])[0]
-                    amount = float(group.get("Metrics", {}).get("UnblendedCost", {}).get("Amount", "0"))
+                    amount = float(
+                        group.get("Metrics", {}).get("UnblendedCost", {}).get("Amount", "0")
+                    )
                     if service and amount > 0:
                         # Sum costs across months
                         costs_by_service[service] = costs_by_service.get(service, 0.0) + amount
@@ -48,12 +52,14 @@ class CostExplorerCollector:
         except ClientError as e:
             if e.response["Error"]["Code"] == "AccessDeniedException":
                 import sys
+
                 print(
                     "INFO: Cost Explorer API access denied. Grant 'ce:GetCostAndUsage' permission to see actual costs.",
                     file=sys.stderr,
                 )
             else:
                 import sys
+
                 print(
                     f"WARNING: Could not get costs from Cost Explorer: {e}",
                     file=sys.stderr,
@@ -93,7 +99,9 @@ class CostExplorerCollector:
             total_service_cost = 0.0
             for result in response.get("ResultsByTime", []):
                 for group in result.get("Groups", []):
-                    amount = float(group.get("Metrics", {}).get("UnblendedCost", {}).get("Amount", "0"))
+                    amount = float(
+                        group.get("Metrics", {}).get("UnblendedCost", {}).get("Amount", "0")
+                    )
                     if amount > 0:
                         total_service_cost += amount
 
@@ -107,6 +115,7 @@ class CostExplorerCollector:
                 pass  # Already logged in get_service_costs
             else:
                 import sys
+
                 print(
                     f"WARNING: Could not get resource costs for {service}: {e}",
                     file=sys.stderr,

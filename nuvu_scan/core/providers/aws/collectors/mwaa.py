@@ -194,9 +194,7 @@ class MWAACollector:
 
         return {"owner": owner, "confidence": confidence}
 
-    def _estimate_cost(
-        self, environment_class: str, min_workers: int, max_workers: int
-    ) -> float:
+    def _estimate_cost(self, environment_class: str, min_workers: int, max_workers: int) -> float:
         """Estimate monthly cost for MWAA environment."""
         # MWAA pricing (as of 2024):
         # - mw1.small: $0.49/hour per environment + $0.055/hour per worker

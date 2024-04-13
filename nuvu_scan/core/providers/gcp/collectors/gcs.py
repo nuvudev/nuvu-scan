@@ -113,10 +113,13 @@ class GCSCollector:
             # Check IAM policy for allUsers or allAuthenticatedUsers
             policy = bucket.get_iam_policy()
             for binding in policy.bindings:
-                if binding["role"] in ["roles/storage.objectViewer", "roles/storage.legacyBucketReader"]:
-                    if "allUsers" in binding.get("members", []) or "allAuthenticatedUsers" in binding.get(
+                if binding["role"] in [
+                    "roles/storage.objectViewer",
+                    "roles/storage.legacyBucketReader",
+                ]:
+                    if "allUsers" in binding.get(
                         "members", []
-                    ):
+                    ) or "allAuthenticatedUsers" in binding.get("members", []):
                         return True
         except Exception:
             # If we can't check IAM, assume not public

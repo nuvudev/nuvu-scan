@@ -135,9 +135,7 @@ class GeminiCollector:
             try:
                 project_name = f"projects/{self.project_id}"
                 project_info = (
-                    self.cloudbilling_client.projects()
-                    .getBillingInfo(name=project_name)
-                    .execute()
+                    self.cloudbilling_client.projects().getBillingInfo(name=project_name).execute()
                 )
                 billing_account = project_info.get("billingAccountName")
 
@@ -164,9 +162,7 @@ class GeminiCollector:
             project_name = f"projects/{self.project_id}"
             try:
                 project_info = (
-                    self.cloudbilling_client.projects()
-                    .getBillingInfo(name=project_name)
-                    .execute()
+                    self.cloudbilling_client.projects().getBillingInfo(name=project_name).execute()
                 )
                 billing_account = project_info.get("billingAccountName")
 
@@ -239,9 +235,7 @@ class GeminiCollector:
 
         try:
             # Try to use Cloud Monitoring API to get usage metrics
-            monitoring_client = discovery.build(
-                "monitoring", "v3", credentials=self.credentials
-            )
+            monitoring_client = discovery.build("monitoring", "v3", credentials=self.credentials)
 
             # Query for Gemini API usage metrics
             # Metric: serviceruntime.googleapis.com/api/request_count
@@ -317,17 +311,13 @@ class GeminiCollector:
         try:
             from google.cloud import bigquery
 
-            bq_client = bigquery.Client(
-                project=self.project_id, credentials=self.credentials
-            )
+            bq_client = bigquery.Client(project=self.project_id, credentials=self.credentials)
 
             # Try to find billing export dataset
             # GCP billing exports are typically in a dataset named like: billing_export_XXXXXX
             # or in the billing account's project
             datasets = list(bq_client.list_datasets())
-            billing_datasets = [
-                d for d in datasets if "billing_export" in d.dataset_id.lower()
-            ]
+            billing_datasets = [d for d in datasets if "billing_export" in d.dataset_id.lower()]
 
             if not billing_datasets:
                 # Try to find in other common locations
