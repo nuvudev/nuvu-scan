@@ -33,7 +33,7 @@ class AWSScanner(CloudProviderScan):
     def _create_session(self) -> boto3.Session:
         """
         Create boto3 session from credentials.
-        
+
         Supports multiple authentication methods:
         1. Access Key + Secret Key (with optional session token)
         2. AWS Profile
@@ -49,73 +49,73 @@ class AWSScanner(CloudProviderScan):
                 "aws_secret_access_key": credentials["secret_access_key"],
                 "region_name": credentials.get("region", "us-east-1"),
             }
-            
+
             # Add session token if provided (for temporary credentials)
             if "session_token" in credentials:
                 session_kwargs["aws_session_token"] = credentials["session_token"]
-            
+
             session = boto3.Session(**session_kwargs)
-            
+
             # Method 1b: If role_arn is provided, assume the role
             if "role_arn" in credentials:
                 session = self._assume_role(session, credentials)
-            
+
             return session
-        
+
         # Method 2: AWS Profile
         elif "profile" in credentials:
             session = boto3.Session(profile_name=credentials["profile"])
-            
+
             # If role_arn is provided with profile, assume the role
             if "role_arn" in credentials:
                 session = self._assume_role(session, credentials)
-            
+
             return session
-        
+
         # Method 3: Role assumption from default credentials
         elif "role_arn" in credentials:
             # Start with default credentials and assume role
             default_session = boto3.Session()
             return self._assume_role(default_session, credentials)
-        
+
         # Method 4: Use default credentials (environment, IAM role, etc.)
         else:
             return boto3.Session()
-    
+
     def _assume_role(self, session: boto3.Session, credentials: dict) -> boto3.Session:
         """
         Assume an IAM role and return a new session with temporary credentials.
-        
+
         Args:
             session: The base boto3 session to use for assuming the role
             credentials: Credentials dict containing role_arn and optional parameters
-            
+
         Returns:
             A new boto3.Session with temporary credentials from the assumed role
         """
         import boto3
         from botocore.exceptions import ClientError
-        
+
         role_arn = credentials["role_arn"]
         role_session_name = credentials.get("role_session_name", "nuvu-scan-session")
         external_id = credentials.get("external_id")
         duration_seconds = credentials.get("duration_seconds", 3600)  # Default 1 hour
-        
+
         try:
             sts_client = session.client("sts")
-            
+
             assume_role_kwargs = {
                 "RoleArn": role_arn,
                 "RoleSessionName": role_session_name,
                 "DurationSeconds": duration_seconds,
             }
-            
+
             if external_id:
                 assume_role_kwargs["ExternalId"] = external_id
-            
+
             response = sts_client.assume_role(**assume_role_kwargs)
             credentials_data = response["Credentials"]
-            
+
             # Create a new session with the temporary credentials
             return boto3.Session(
                 aws_access_key_id=credentials_data["AccessKeyId"],
