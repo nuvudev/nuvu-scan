@@ -49,7 +49,31 @@ from ..formatters.json import JSONFormatter
     envvar="AWS_SECRET_ACCESS_KEY",
     help="AWS secret access key (default: from AWS_SECRET_ACCESS_KEY env var)",
 )
+@click.option(
+    "--session-token",
+    envvar="AWS_SESSION_TOKEN",
+    help="AWS session token for temporary credentials (default: from AWS_SESSION_TOKEN env var)",
+)
 @click.option("--profile", help="AWS profile name (default: default profile)")
+@click.option(
+    "--role-arn",
+    help="IAM role ARN to assume (e.g., arn:aws:iam::123456789012:role/MyRole)",
+)
+@click.option(
+    "--role-session-name",
+    default="nuvu-scan-session",
+    help="Session name for role assumption (default: nuvu-scan-session)",
+)
+@click.option(
+    "--external-id",
+    help="External ID for role assumption (required if role requires it)",
+)
+@click.option(
+    "--role-duration-seconds",
+    type=int,
+    default=3600,
+    help="Duration in seconds for assumed role credentials (default: 3600)",
+)
 @click.option(
     "--gcp-credentials",
     envvar="GOOGLE_APPLICATION_CREDENTIALS",
@@ -66,7 +90,12 @@ def scan_command(
     region: tuple,
     access_key_id: str | None,
     secret_access_key: str | None,
+    session_token: str | None,
     profile: str | None,
+    role_arn: str | None,
+    role_session_name: str,
+    external_id: str | None,
+    role_duration_seconds: int,
     gcp_credentials: str | None,
     gcp_project: str | None,
 ):
@@ -77,30 +106,45 @@ def scan_command(
     account_id = None
 
     if provider == "aws":
+        # Build credentials dict
+        credentials = {}
+
+        # Get credentials from CLI args or environment
         if access_key_id and secret_access_key:
-            credentials = {
-                "access_key_id": access_key_id,
-                "secret_access_key": secret_access_key,
-                "region": region[0] if region else "us-east-1",
-            }
+            credentials["access_key_id"] = access_key_id
+            credentials["secret_access_key"] = secret_access_key
+            # Add session token if provided
+            if session_token:
+                credentials["session_token"] = session_token
         elif profile:
-            credentials = {"profile": profile}
+            credentials["profile"] = profile
         else:
             # Try environment variables
             access_key_id = os.getenv("AWS_ACCESS_KEY_ID_NUVU") or os.getenv("AWS_ACCESS_KEY_ID")
             secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY_NUVU") or os.getenv(
                 "AWS_SECRET_ACCESS_KEY"
             )
+            session_token = os.getenv("AWS_SESSION_TOKEN_NUVU") or os.getenv("AWS_SESSION_TOKEN")
 
             if access_key_id and secret_access_key:
-                credentials = {
-                    "access_key_id": access_key_id,
-                    "secret_access_key": secret_access_key,
-                    "region": region[0] if region else "us-east-1",
-                }
-            else:
-                # Use default credentials (IAM role, etc.)
-                credentials = {}
+                credentials["access_key_id"] = access_key_id
+                credentials["secret_access_key"] = secret_access_key
+                if session_token:
+                    credentials["session_token"] = session_token
+
+        # Set region
+        if region:
+            credentials["region"] = region[0]
+        elif "region" not in credentials:
+            credentials["region"] = "us-east-1"
+
+        # Add role assumption parameters if provided
+        if role_arn:
+            credentials["role_arn"] = role_arn
+            credentials["role_session_name"] = role_session_name
+            if external_id:
+                credentials["external_id"] = external_id
+            credentials["duration_seconds"] = role_duration_seconds
 
     elif provider == "gcp":
         # GCP credentials handling

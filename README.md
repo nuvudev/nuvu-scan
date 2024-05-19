@@ -35,20 +35,81 @@ pip install nuvu-scan
 
 **Prerequisites:** Create an IAM user or role with the read-only policy from `aws-iam-policy.json`. See the [AWS Setup](#aws-v1---available-now) section below for detailed instructions.
 
-```bash
-# Scan AWS account (uses default credentials)
-nuvu scan --provider aws
+Nuvu Scan supports three AWS authentication methods:
 
-# Specify credentials via environment variables
+#### 1. Access Key + Secret Key (Standard Credentials)
+
+```bash
+# Via environment variables
 export AWS_ACCESS_KEY_ID=your-key
 export AWS_SECRET_ACCESS_KEY=your-secret
 nuvu scan --provider aws
+
+# Via CLI arguments
+nuvu scan --provider aws \
+  --access-key-id your-key \
+  --secret-access-key your-secret
 
 # Output to JSON
 nuvu scan --provider aws --output-format json --output-file report.json
 
 # Scan specific regions
 nuvu scan --provider aws --region us-east-1 --region eu-west-1
+```
+
+#### 2. Access Key + Secret Key + Session Token (Temporary Credentials)
+
+For temporary credentials (e.g., from AWS SSO, assumed roles, or STS):
+
+```bash
+# Via environment variables
+export AWS_ACCESS_KEY_ID=your-key
+export AWS_SECRET_ACCESS_KEY=your-secret
+export AWS_SESSION_TOKEN=your-session-token
+nuvu scan --provider aws
+
+# Via CLI arguments
+nuvu scan --provider aws \
+  --access-key-id your-key \
+  --secret-access-key your-secret \
+  --session-token your-session-token
+```
+
+#### 3. IAM Role Assumption
+
+Assume an IAM role using your credentials (or default credentials if running on EC2/Lambda):
+
+```bash
+# Assume role with explicit credentials
+nuvu scan --provider aws \
+  --access-key-id your-key \
+  --secret-access-key your-secret \
+  --role-arn arn:aws:iam::123456789012:role/MyRole
+
+# Assume role from default credentials (EC2/Lambda IAM role)
+nuvu scan --provider aws \
+  --role-arn arn:aws:iam::123456789012:role/MyRole
+
+# With external ID (for enhanced security)
+nuvu scan --provider aws \
+  --role-arn arn:aws:iam::123456789012:role/MyRole \
+  --external-id your-external-id
+
+# Custom session name and duration
+nuvu scan --provider aws \
+  --role-arn arn:aws:iam::123456789012:role/MyRole \
+  --role-session-name my-scan-session \
+  --role-duration-seconds 7200
+```
+
+**Note:** You can combine methods 2 and 3 (use temporary credentials to assume a role):
+
+```bash
+nuvu scan --provider aws \
+  --access-key-id your-key \
+  --secret-access-key your-secret \
+  --session-token your-session-token \
+  --role-arn arn:aws:iam::123456789012:role/MyRole
 ```
 
 ### GCP Scanning
@@ -123,14 +184,52 @@ Nuvu requires read-only access to your AWS account. The tool uses the following 
    aws iam create-access-key --user-name nuvu-scan-readonly
    ```
 
-4. **Use the credentials**:
+4. **Use the credentials** (choose one of the three methods below):
+
+   **Method 1: Standard Credentials (Access Key + Secret Key)**
    ```bash
    export AWS_ACCESS_KEY_ID=your-access-key-id
    export AWS_SECRET_ACCESS_KEY=your-secret-access-key
    nuvu scan --provider aws
    ```
 
+   **Method 2: Temporary Credentials (Access Key + Secret Key + Session Token)**
+   
+   If you're using AWS SSO, assumed roles, or other temporary credentials:
+   ```bash
+   export AWS_ACCESS_KEY_ID=your-access-key-id
+   export AWS_SECRET_ACCESS_KEY=your-secret-access-key
+   export AWS_SESSION_TOKEN=your-session-token
+   nuvu scan --provider aws
+   ```
+
+   **Method 3: IAM Role Assumption**
+   
+   To assume a role (useful for cross-account access or when using a role with more permissions):
+   ```bash
+   # With explicit credentials
+   nuvu scan --provider aws \
+     --access-key-id your-access-key-id \
+     --secret-access-key your-secret-access-key \
+     --role-arn arn:aws:iam::123456789012:role/MyRole
+   
+   # From default credentials (e.g., EC2 instance role)
+   nuvu scan --provider aws \
+     --role-arn arn:aws:iam::123456789012:role/MyRole
+   
+   # With external ID (if required by the role)
+   nuvu scan --provider aws \
+     --role-arn arn:aws:iam::123456789012:role/MyRole \
+     --external-id your-external-id
+   ```
+
 The IAM policy file (`aws-iam-policy.json`) is included in this repository and contains all the read-only permissions required by Nuvu Scan. This policy follows the principle of least privilege and only grants read-only access to the services needed for scanning.
+
+**Authentication Method Selection Guide:**
+
+- **Use Method 1** (Access Key + Secret Key) for permanent IAM user credentials
+- **Use Method 2** (Access Key + Secret Key + Session Token) when you have temporary credentials from AWS SSO, STS, or assumed roles
+- **Use Method 3** (Role Assumption) for cross-account access, when you need to use a role with different permissions, or when running on EC2/Lambda with an IAM role
 
 ### GCP (v2 - Available Now)
 Nuvu requires read-only access to your GCP project via a Service Account. The tool uses the following GCP services:
