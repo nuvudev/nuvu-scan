@@ -126,6 +126,17 @@ nuvu scan --provider gcp --gcp-credentials /path/to/service-account-key.json --g
 nuvu scan --provider gcp --gcp-project your-project-id --output-format json --output-file gcp-report.json
 ```
 
+### Push to Remote API (Optional)
+
+You can optionally push scan results to a remote API for centralized tracking:
+
+```bash
+# Push results to a remote endpoint
+nuvu scan --provider aws --push --api-key your-api-key --api-url https://your-api.example.com
+```
+
+This is useful for integrating with your own data governance platforms or CI/CD pipelines.
+
 ## Features
 
 - **Asset Discovery**: Automatically discovers cloud data assets:

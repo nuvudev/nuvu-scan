@@ -27,8 +27,19 @@ class AWSScanner(CloudProviderScan):
     def __init__(self, config: ScanConfig):
         super().__init__(config)
         self.session = self._create_session()
+        # Auto-detect account ID if not provided
+        if not self.config.account_id:
+            self.config.account_id = self._get_account_id()
         self.collectors = self._initialize_collectors()
         self.cost_explorer = CostExplorerCollector(self.session, self.config.regions)
+
+    def _get_account_id(self) -> str:
+        """Get the AWS account ID using STS."""
+        try:
+            sts_client = self.session.client("sts")
+            return sts_client.get_caller_identity()["Account"]
+        except Exception:
+            return "unknown"
 
     def _create_session(self) -> boto3.Session:
         """
