@@ -21,17 +21,32 @@ class CostExplorerCollector:
         )  # Cost Explorer is global
 
     def get_service_costs(self, start_date: datetime, end_date: datetime) -> dict[str, float]:
-        """Get costs by service for a date range."""
+        """Get costs by service for a date range.
+        
+        Returns actual costs (not estimates) for the specified date range.
+        When using MONTHLY granularity, returns full month costs.
+        When using DAILY granularity, returns sum of daily costs.
+        """
         costs_by_service = {}
 
         try:
+            # Calculate the date range
+            days_in_period = (end_date - start_date).days
+            
+            # Use DAILY granularity for periods < 90 days to get accurate daily costs
+            # Use MONTHLY granularity for longer periods for efficiency
+            if days_in_period <= 90:
+                granularity = "DAILY"
+            else:
+                granularity = "MONTHLY"
+            
             # Get costs grouped by service
             response = self.cost_explorer_client.get_cost_and_usage(
                 TimePeriod={
                     "Start": start_date.strftime("%Y-%m-%d"),
                     "End": end_date.strftime("%Y-%m-%d"),
                 },
-                Granularity="MONTHLY",
+                Granularity=granularity,
                 Metrics=["UnblendedCost"],
                 GroupBy=[
                     {"Type": "DIMENSION", "Key": "SERVICE"},
@@ -46,7 +61,7 @@ class CostExplorerCollector:
                         group.get("Metrics", {}).get("UnblendedCost", {}).get("Amount", "0")
                     )
                     if service and amount > 0:
-                        # Sum costs across months
+                        # Sum costs across time periods (days or months)
                         costs_by_service[service] = costs_by_service.get(service, 0.0) + amount
 
         except ClientError as e:
@@ -70,19 +85,29 @@ class CostExplorerCollector:
     def get_resource_costs(
         self, service: str, start_date: datetime, end_date: datetime
     ) -> dict[str, float]:
-        """Get costs by resource for a specific service using usage type grouping."""
+        """Get costs by resource for a specific service using usage type grouping.
+
+        Note: Cost Explorer doesn't support resource-level costs without tags.
+        This returns service-level totals grouped by usage type.
+        """
         costs_by_resource = {}
 
         try:
             # Cost Explorer doesn't support RESOURCE_ID grouping directly
             # Instead, we'll use USAGE_TYPE to get more granular cost data
             # For S3, we can filter by usage type (e.g., "Storage", "DataTransfer-Out-Bytes")
+            days_in_period = (end_date - start_date).days
+            if days_in_period <= 90:
+                granularity = "DAILY"
+            else:
+                granularity = "MONTHLY"
+
             response = self.cost_explorer_client.get_cost_and_usage(
                 TimePeriod={
                     "Start": start_date.strftime("%Y-%m-%d"),
                     "End": end_date.strftime("%Y-%m-%d"),
                 },
-                Granularity="MONTHLY",
+                Granularity=granularity,
                 Metrics=["UnblendedCost"],
                 Filter={
                     "Dimensions": {
@@ -124,35 +149,30 @@ class CostExplorerCollector:
         return costs_by_resource
 
     def get_monthly_cost_for_service(self, service: str) -> float:
-        """Get estimated monthly cost for a service based on last 30 days."""
+        """Get estimated monthly cost for a service based on last 30 days.
+        
+        Returns the actual cost for the last 30 days, which serves as a monthly estimate.
+        """
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=30)
 
         service_costs = self.get_service_costs(start_date, end_date)
         total_cost = service_costs.get(service, 0.0)
 
-        # Convert to monthly estimate (30-day average * 30)
-        days_in_period = (end_date - start_date).days
-        if days_in_period > 0:
-            daily_avg = total_cost / days_in_period
-            monthly_estimate = daily_avg * 30
-            return monthly_estimate
-
+        # Return the actual 30-day cost as monthly estimate
+        # This is more accurate than extrapolating from a shorter period
         return total_cost
 
     def get_cost_for_resource(self, service: str, resource_id: str) -> float:
-        """Get estimated monthly cost for a specific resource."""
+        """Get estimated monthly cost for a specific resource.
+
+        Returns the actual 30-day cost as the monthly estimate.
+        """
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=30)
 
         resource_costs = self.get_resource_costs(service, start_date, end_date)
         total_cost = resource_costs.get(resource_id, 0.0)
 
-        # Convert to monthly estimate
-        days_in_period = (end_date - start_date).days
-        if days_in_period > 0:
-            daily_avg = total_cost / days_in_period
-            monthly_estimate = daily_avg * 30
-            return monthly_estimate
-
+        # Return the actual 30-day cost
         return total_cost

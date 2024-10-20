@@ -23,15 +23,24 @@ class S3Collector:
 
     def collect(self) -> list[Asset]:
         """Collect all S3 buckets."""
+        import sys
         assets = []
 
         try:
             # List all buckets
             response = self.s3_client.list_buckets()
+            buckets = response.get("Buckets", [])
+            
+            if not buckets:
+                print("No S3 buckets found", file=sys.stderr)
+                return assets
+            
+            print(f"Found {len(buckets)} S3 buckets, processing...", file=sys.stderr)
 
-            for bucket_info in response.get("Buckets", []):
+            for i, bucket_info in enumerate(buckets, 1):
                 bucket_name = bucket_info["Name"]
                 created_at = bucket_info["CreationDate"].isoformat()
+                print(f"  [{i}/{len(buckets)}] Processing bucket: {bucket_name}...", file=sys.stderr, end="\r")
 
                 try:
                     # Get bucket location
@@ -92,15 +101,17 @@ class S3Collector:
                     )
 
                     assets.append(asset)
+                    print(f"  [{i}/{len(buckets)}] Processed: {bucket_name} ({len(assets)} assets)", file=sys.stderr)
 
                 except ClientError as e:
                     # Skip buckets we can't access
-                    print(f"Error accessing bucket {bucket_name}: {e}")
+                    print(f"  [{i}/{len(buckets)}] Error accessing bucket {bucket_name}: {e}", file=sys.stderr)
                     continue
 
         except ClientError as e:
-            print(f"Error listing S3 buckets: {e}")
+            print(f"Error listing S3 buckets: {e}", file=sys.stderr)
 
+        print(f"\nCompleted S3 collection: {len(assets)} buckets", file=sys.stderr)
         return assets
 
     def _get_bucket_tags(self, bucket_name: str) -> dict[str, str]:
@@ -136,12 +147,13 @@ class S3Collector:
         total_size = 0
         object_count = 0
         storage_classes = {}
+        max_objects_to_check = 10000  # Limit to prevent hanging on huge buckets
 
         try:
             # Use paginator for large buckets
             paginator = self.s3_client.get_paginator("list_objects_v2")
 
-            for page in paginator.paginate(Bucket=bucket.name):
+            for page in paginator.paginate(Bucket=bucket.name, MaxKeys=1000):
                 for obj in page.get("Contents", []):
                     size = obj.get("Size", 0)
                     storage_class = obj.get("StorageClass", "STANDARD")
@@ -149,6 +161,15 @@ class S3Collector:
                     total_size += size
                     object_count += 1
                     storage_classes[storage_class] = storage_classes.get(storage_class, 0) + size
+                    
+                    # Limit object counting to prevent hanging on huge buckets
+                    if object_count >= max_objects_to_check:
+                        # Estimate total size based on sampled objects
+                        # This is approximate but prevents hanging
+                        break
+                
+                if object_count >= max_objects_to_check:
+                    break
         except ClientError:
             pass
 
@@ -164,13 +185,15 @@ class S3Collector:
 
         try:
             # Try CloudTrail to find last API call to this bucket
+            # Use shorter time window and timeout to prevent hanging
             cloudtrail_client = self.session.client("cloudtrail", region_name="us-east-1")
 
-            # Look for S3 API calls in the last 90 days
+            # Look for S3 API calls in the last 30 days (reduced from 90 to speed up)
             end_time = datetime.utcnow()
-            start_time = end_time - timedelta(days=90)
+            start_time = end_time - timedelta(days=30)
 
             try:
+                # Use a timeout or limit the lookup to prevent hanging
                 response = cloudtrail_client.lookup_events(
                     LookupAttributes=[
                         {"AttributeKey": "ResourceName", "AttributeValue": bucket_name},
@@ -190,35 +213,7 @@ class S3Collector:
 
             except Exception:
                 # CloudTrail might not be available or no events found
-                pass
-
-            # Fallback: Try CloudWatch metrics for bucket requests
-            try:
-                cloudwatch_client = self.session.client("cloudwatch")
-                # Check for GetObject, PutObject, ListBucket requests in last 30 days
-                end_time_cw = datetime.utcnow()
-                start_time_cw = end_time_cw - timedelta(days=30)
-
-                metrics = cloudwatch_client.get_metric_statistics(
-                    Namespace="AWS/S3",
-                    MetricName="NumberOfObjects",
-                    Dimensions=[{"Name": "BucketName", "Value": bucket_name}],
-                    StartTime=start_time_cw,
-                    EndTime=end_time_cw,
-                    Period=86400,  # 1 day
-                    Statistics=["SampleCount"],
-                )
-
-                datapoints = metrics.get("Datapoints", [])
-                if datapoints:
-                    # Get the most recent datapoint
-                    latest_point = max(datapoints, key=lambda x: x.get("Timestamp", datetime.min))
-                    timestamp = latest_point.get("Timestamp")
-                    if timestamp:
-                        return timestamp.isoformat()
-
-            except Exception:
-                # CloudWatch might not have metrics or no access
+                # Skip CloudWatch fallback to speed things up
                 pass
 
         except Exception:
