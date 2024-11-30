@@ -22,7 +22,7 @@ class CostExplorerCollector:
 
     def get_service_costs(self, start_date: datetime, end_date: datetime) -> dict[str, float]:
         """Get costs by service for a date range.
-        
+
         Returns actual costs (not estimates) for the specified date range.
         When using MONTHLY granularity, returns full month costs.
         When using DAILY granularity, returns sum of daily costs.
@@ -32,14 +32,14 @@ class CostExplorerCollector:
         try:
             # Calculate the date range
             days_in_period = (end_date - start_date).days
-            
+
             # Use DAILY granularity for periods < 90 days to get accurate daily costs
             # Use MONTHLY granularity for longer periods for efficiency
             if days_in_period <= 90:
                 granularity = "DAILY"
             else:
                 granularity = "MONTHLY"
-            
+
             # Get costs grouped by service
             response = self.cost_explorer_client.get_cost_and_usage(
                 TimePeriod={
@@ -150,7 +150,7 @@ class CostExplorerCollector:
 
     def get_monthly_cost_for_service(self, service: str) -> float:
         """Get estimated monthly cost for a service based on last 30 days.
-        
+
         Returns the actual cost for the last 30 days, which serves as a monthly estimate.
         """
         end_date = datetime.utcnow()
