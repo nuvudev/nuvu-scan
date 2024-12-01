@@ -22,6 +22,7 @@ class MWAACollector:
     def collect(self) -> list[Asset]:
         """Collect all MWAA environments."""
         import sys
+
         assets = []
 
         # MWAA is available in specific regions
@@ -40,11 +41,18 @@ class MWAACollector:
         ]
 
         if not self.regions:
-            print(f"Checking {len(regions_to_check)} regions for MWAA environments...", file=sys.stderr)
+            print(
+                f"Checking {len(regions_to_check)} regions for MWAA environments...",
+                file=sys.stderr,
+            )
 
         for i, region in enumerate(regions_to_check, 1):
             if not self.regions:
-                print(f"  [{i}/{len(regions_to_check)}] Checking {region}...", file=sys.stderr, end="\r")
+                print(
+                    f"  [{i}/{len(regions_to_check)}] Checking {region}...",
+                    file=sys.stderr,
+                    end="\r",
+                )
             try:
                 mwaa_client = self.session.client("mwaa", region_name=region)
 
@@ -131,7 +139,10 @@ class MWAACollector:
                     if e.response["Error"]["Code"] == "AccessDeniedException":
                         # MWAA might not be available in this region or no permissions
                         if not self.regions:
-                            print(f"  [{i}/{len(regions_to_check)}] {region}: No access or no MWAA", file=sys.stderr)
+                            print(
+                                f"  [{i}/{len(regions_to_check)}] {region}: No access or no MWAA",
+                                file=sys.stderr,
+                            )
                         continue
                     print(f"Error listing MWAA environments in {region}: {e}", file=sys.stderr)
                     continue
@@ -143,7 +154,10 @@ class MWAACollector:
                 continue
 
         if not self.regions:
-            print(f"  [{len(regions_to_check)}/{len(regions_to_check)}] Completed checking all regions", file=sys.stderr)
+            print(
+                f"  [{len(regions_to_check)}/{len(regions_to_check)}] Completed checking all regions",
+                file=sys.stderr,
+            )
 
         return assets
 

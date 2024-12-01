@@ -24,6 +24,7 @@ class S3Collector:
     def collect(self) -> list[Asset]:
         """Collect all S3 buckets."""
         import sys
+
         assets = []
 
         try:
@@ -40,7 +41,11 @@ class S3Collector:
             for i, bucket_info in enumerate(buckets, 1):
                 bucket_name = bucket_info["Name"]
                 created_at = bucket_info["CreationDate"].isoformat()
-                print(f"  [{i}/{len(buckets)}] Processing bucket: {bucket_name}...", file=sys.stderr, end="\r")
+                print(
+                    f"  [{i}/{len(buckets)}] Processing bucket: {bucket_name}...",
+                    file=sys.stderr,
+                    end="\r",
+                )
 
                 try:
                     # Get bucket location
@@ -101,11 +106,17 @@ class S3Collector:
                     )
 
                     assets.append(asset)
-                    print(f"  [{i}/{len(buckets)}] Processed: {bucket_name} ({len(assets)} assets)", file=sys.stderr)
+                    print(
+                        f"  [{i}/{len(buckets)}] Processed: {bucket_name} ({len(assets)} assets)",
+                        file=sys.stderr,
+                    )
 
                 except ClientError as e:
                     # Skip buckets we can't access
-                    print(f"  [{i}/{len(buckets)}] Error accessing bucket {bucket_name}: {e}", file=sys.stderr)
+                    print(
+                        f"  [{i}/{len(buckets)}] Error accessing bucket {bucket_name}: {e}",
+                        file=sys.stderr,
+                    )
                     continue
 
         except ClientError as e:
