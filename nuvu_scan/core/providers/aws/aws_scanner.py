@@ -8,7 +8,13 @@ from typing import Any
 
 import boto3
 
-from nuvu_scan.core.base import Asset, CloudProviderScan, NormalizedCategory, ScanConfig
+from nuvu_scan.core.base import (
+    Asset,
+    CloudProviderScan,
+    NormalizedCategory,
+    ScanConfig,
+    ScanResult,
+)
 
 from .collectors.athena import AthenaCollector
 from .collectors.cost_explorer import CostExplorerCollector
@@ -29,6 +35,51 @@ class AWSScanner(CloudProviderScan):
         self.session = self._create_session()
         self.collectors = self._initialize_collectors()
         self.cost_explorer = CostExplorerCollector(self.session, self.config.regions)
+
+        # Auto-detect account ID if not provided
+        if not self.config.account_id:
+            self.config.account_id = self._get_account_id()
+
+    def scan(self):
+        """Execute a full scan with AWS-specific cost handling."""
+        from datetime import datetime
+
+        # Discover assets
+        assets = self.list_assets()
+
+        # Analyze each asset
+        total_estimated_cost = 0.0
+        actual_total_cost = None
+        actual_service_costs = None
+
+        for asset in assets:
+            if asset.asset_type == "cost_summary":
+                actual_total_cost = asset.usage_metrics.get("total_actual_cost_30d")
+                actual_service_costs = asset.usage_metrics.get("actual_costs_30d")
+                continue
+
+            asset.usage_metrics = self.get_usage_metrics(asset)
+            asset.cost_estimate_usd = self.get_cost_estimate(asset)
+            total_estimated_cost += asset.cost_estimate_usd or 0.0
+
+        # Build summary
+        summary = self._build_summary(assets)
+        if actual_total_cost is not None:
+            summary["total_actual_cost_30d"] = actual_total_cost
+            summary["actual_costs_30d"] = actual_service_costs or {}
+            summary["estimated_assets_cost_total"] = total_estimated_cost
+
+        # Use actual 30-day cost if available, otherwise fallback to estimates
+        total_cost = actual_total_cost if actual_total_cost is not None else total_estimated_cost
+
+        return ScanResult(
+            provider=self.provider,
+            account_id=self.config.account_id or "unknown",
+            scan_timestamp=datetime.utcnow().isoformat(),
+            assets=assets,
+            total_cost_estimate_usd=total_cost,
+            summary=summary,
+        )
 
     def _create_session(self) -> boto3.Session:
         """
@@ -126,6 +177,16 @@ class AWSScanner(CloudProviderScan):
         except ClientError as e:
             raise ValueError(f"Failed to assume role {role_arn}: {str(e)}")
 
+    def _get_account_id(self) -> str:
+        """Get AWS account ID from STS get_caller_identity."""
+        try:
+            sts_client = self.session.client("sts", region_name="us-east-1")
+            identity = sts_client.get_caller_identity()
+            return identity.get("Account", "unknown")
+        except Exception:
+            # If we can't get account ID, return "unknown"
+            return "unknown"
+
     def _initialize_collectors(self) -> list:
         """Initialize all AWS service collectors."""
         collectors = []
@@ -149,14 +210,26 @@ class AWSScanner(CloudProviderScan):
     def list_assets(self) -> list[Asset]:
         """Discover all AWS assets across all collectors."""
         all_assets = []
+        import sys
 
-        for collector in self.collectors:
+        collector_names = [c.__class__.__name__ for c in self.collectors]
+        print(f"Scanning with collectors: {', '.join(collector_names)}", file=sys.stderr)
+
+        for i, collector in enumerate(self.collectors, 1):
+            collector_name = collector.__class__.__name__
+            print(
+                f"[{i}/{len(self.collectors)}] Collecting from {collector_name}...", file=sys.stderr
+            )
             try:
                 assets = collector.collect()
                 all_assets.extend(assets)
+                print(
+                    f"[{i}/{len(self.collectors)}] {collector_name}: Found {len(assets)} assets",
+                    file=sys.stderr,
+                )
             except Exception as e:
                 # Log error but continue with other collectors
-                print(f"Error collecting from {collector.__class__.__name__}: {e}")
+                print(f"Error collecting from {collector_name}: {e}", file=sys.stderr)
                 continue
 
         # Add a summary asset with actual costs from Cost Explorer
@@ -169,36 +242,34 @@ class AWSScanner(CloudProviderScan):
 
             if service_costs:
                 total_actual_cost = sum(service_costs.values())
-                # Convert to monthly estimate
-                days_in_period = (end_date - start_date).days
-                if days_in_period > 0:
-                    daily_avg = total_actual_cost / days_in_period
-                    monthly_estimate = daily_avg * 30
+                # Use the actual 30-day cost as monthly estimate
+                # This represents the actual spend, not an extrapolation
+                monthly_estimate = total_actual_cost
 
-                    # Create a summary asset
-                    cost_summary_asset = Asset(
-                        provider="aws",
-                        asset_type="cost_summary",
-                        normalized_category=NormalizedCategory.SECURITY,  # Using security as placeholder
-                        service="Cost Explorer",
-                        region="global",
-                        arn="arn:aws:ce::cost-summary",
-                        name="AWS Cost Summary (Last 30 Days)",
-                        created_at=None,
-                        last_activity_at=datetime.utcnow().isoformat(),
-                        tags={},
-                        cost_estimate_usd=monthly_estimate,
-                        risk_flags=[],
-                        ownership_confidence="unknown",
-                        suggested_owner=None,
-                        usage_metrics={
-                            "actual_costs_30d": service_costs,
-                            "total_actual_cost_30d": total_actual_cost,
-                            "estimated_monthly_cost": monthly_estimate,
-                            "note": "Actual costs from AWS Cost Explorer API. Note: Some costs shown are for services that are not data assets (e.g., domain registration, email services, DNS). Individual asset costs below are estimates based on resource usage.",
-                        },
-                    )
-                    all_assets.append(cost_summary_asset)
+                # Create a summary asset
+                cost_summary_asset = Asset(
+                    provider="aws",
+                    asset_type="cost_summary",
+                    normalized_category=NormalizedCategory.SECURITY,  # Using security as placeholder
+                    service="Cost Explorer",
+                    region="global",
+                    arn="arn:aws:ce::cost-summary",
+                    name="AWS Cost Summary (Last 30 Days)",
+                    created_at=None,
+                    last_activity_at=datetime.utcnow().isoformat(),
+                    tags={},
+                    cost_estimate_usd=monthly_estimate,
+                    risk_flags=[],
+                    ownership_confidence="unknown",
+                    suggested_owner=None,
+                    usage_metrics={
+                        "actual_costs_30d": service_costs,
+                        "total_actual_cost_30d": total_actual_cost,
+                        "estimated_monthly_cost": monthly_estimate,
+                        "note": "Actual costs from AWS Cost Explorer API for the last 30 days. This represents real spend, not estimates. Note: Some costs shown are for services that are not data assets (e.g., domain registration, email services, DNS). Individual asset costs below may be estimates based on resource usage.",
+                    },
+                )
+                all_assets.append(cost_summary_asset)
         except Exception as e:
             # If Cost Explorer fails, continue without summary
             import sys
@@ -224,7 +295,11 @@ class AWSScanner(CloudProviderScan):
         return {}
 
     def get_cost_estimate(self, asset: Asset) -> float:
-        """Estimate monthly cost for an AWS asset."""
+        """Estimate monthly cost for an AWS asset.
+
+        First tries to get actual cost from Cost Explorer API.
+        Falls back to collector-based estimates if Cost Explorer data is not available.
+        """
         # First, try to get actual cost from Cost Explorer API
         try:
             # Map service names to Cost Explorer service names
@@ -238,15 +313,16 @@ class AWSScanner(CloudProviderScan):
 
             cost_explorer_service = service_mapping.get(asset.service)
             if cost_explorer_service:
-                # Get service-level cost from Cost Explorer
+                # Get service-level cost from Cost Explorer (last 30 days actual cost)
                 service_cost = self.cost_explorer.get_monthly_cost_for_service(
                     cost_explorer_service
                 )
                 if service_cost > 0:
-                    # If we have service-level cost, we can use it as a baseline
-                    # For now, we'll use the collector's estimate if available,
-                    # but if it's 0 and we have service cost, we'll use a portion
-                    # This is a heuristic - ideally we'd have per-resource costs
+                    # We have actual service-level cost from Cost Explorer
+                    # For now, we'll still use collector estimates for individual assets
+                    # because Cost Explorer doesn't provide per-resource costs without tags
+                    # But we could potentially distribute service cost across assets proportionally
+                    # For now, prefer collector estimates which are more accurate per-resource
                     pass  # Continue to collector-based estimation
 
         except Exception:

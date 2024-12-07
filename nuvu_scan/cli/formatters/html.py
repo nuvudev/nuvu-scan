@@ -10,6 +10,69 @@ class HTMLFormatter:
 
     def format(self, result: ScanResult) -> str:
         """Format scan result as HTML."""
+        # Build summary cards (use actual cost if available)
+        actual_total = result.summary.get("total_actual_cost_30d")
+        estimated_assets_total = result.summary.get("estimated_assets_cost_total")
+
+        summary_cards = f"""
+            <div class="summary-card">
+                <h3>Total Assets</h3>
+                <div class="value">{len(result.assets)}</div>
+            </div>
+        """
+
+        if actual_total is not None:
+            summary_cards += f"""
+            <div class="summary-card">
+                <h3>Actual 30-Day Cost</h3>
+                <div class="value">${actual_total:,.2f}</div>
+            </div>
+            <div class="summary-card">
+                <h3>Estimated Asset Cost</h3>
+                <div class="value">${(estimated_assets_total or 0):,.2f}</div>
+            </div>
+            """
+        else:
+            summary_cards += f"""
+            <div class="summary-card">
+                <h3>Estimated Monthly Cost</h3>
+                <div class="value">${result.total_cost_estimate_usd:,.2f}</div>
+            </div>
+            """
+
+        summary_cards += f"""
+            <div class="summary-card">
+                <h3>Unused Assets</h3>
+                <div class="value">{result.summary.get('unused_count', 0)}</div>
+            </div>
+            <div class="summary-card">
+                <h3>No Owner</h3>
+                <div class="value">{result.summary.get('no_owner_count', 0)}</div>
+            </div>
+            <div class="summary-card">
+                <h3>Risky Assets</h3>
+                <div class="value">{result.summary.get('risky_count', 0)}</div>
+            </div>
+        """
+
+        # Build service costs table if available
+        service_costs_html = ""
+        service_costs = result.summary.get("actual_costs_30d", {})
+        if service_costs:
+            # Sort by cost descending
+            sorted_services = sorted(service_costs.items(), key=lambda x: x[1], reverse=True)
+            rows = "\n".join(
+                f"            <tr><td>{service}</td><td>${cost:,.2f}</td></tr>"
+                for service, cost in sorted_services
+            )
+            service_costs_html = f"""
+        <h2>Service Costs (Last 30 Days)</h2>
+        <table>
+            <tr><th>Service</th><th>Cost (USD)</th></tr>
+{rows}
+        </table>
+            """
+
         html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -42,27 +105,9 @@ class HTMLFormatter:
 
         <h2>Executive Summary</h2>
         <div class="summary">
-            <div class="summary-card">
-                <h3>Total Assets</h3>
-                <div class="value">{len(result.assets)}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Estimated Monthly Cost</h3>
-                <div class="value">${result.total_cost_estimate_usd:,.2f}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Unused Assets</h3>
-                <div class="value">{result.summary.get('unused_count', 0)}</div>
-            </div>
-            <div class="summary-card">
-                <h3>No Owner</h3>
-                <div class="value">{result.summary.get('no_owner_count', 0)}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Risky Assets</h3>
-                <div class="value">{result.summary.get('risky_count', 0)}</div>
-            </div>
+{summary_cards}
         </div>
+{service_costs_html}
 
         <h2>Assets by Category</h2>
         <table>
