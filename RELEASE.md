@@ -8,7 +8,7 @@
      - Go to PyPI → Account Settings → API tokens
      - Add a new "Trusted Publisher"
      - Select "GitHub" as the publisher
-     - Repository: `flexilogix/nuvu-scan`
+     - Repository: `nuvudev/nuvu-scan`
      - Workflow filename: `.github/workflows/publish.yml`
      - Environment: (leave empty for default)
 
@@ -101,7 +101,7 @@ git push origin v1.3.2
 
 If you need to create a release manually:
 
-1. Go to https://github.com/flexilogix/nuvu-scan/releases
+1. Go to https://github.com/nuvudev/nuvu-scan/releases
 2. Click "Draft a new release"
 3. Select tag: `v1.3.2` (or create new tag)
 4. Title: `v1.3.2`

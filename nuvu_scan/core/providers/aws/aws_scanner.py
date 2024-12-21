@@ -33,6 +33,8 @@ class AWSScanner(CloudProviderScan):
     def __init__(self, config: ScanConfig):
         super().__init__(config)
         self.session = self._create_session()
+        if not self.config.regions:
+            self.config.regions = self._resolve_regions()
         self.collectors = self._initialize_collectors()
         self.cost_explorer = CostExplorerCollector(self.session, self.config.regions)
 
@@ -176,6 +178,18 @@ class AWSScanner(CloudProviderScan):
             )
         except ClientError as e:
             raise ValueError(f"Failed to assume role {role_arn}: {str(e)}")
+
+    def _resolve_regions(self) -> list[str]:
+        """Resolve regions to scan. If none provided, scan all enabled regions."""
+        try:
+            ec2 = self.session.client("ec2", region_name="us-east-1")
+            response = ec2.describe_regions(AllRegions=False)
+            regions = [region["RegionName"] for region in response.get("Regions", [])]
+            if regions:
+                return regions
+        except Exception:
+            pass
+        return ["us-east-1"]
 
     def _get_account_id(self) -> str:
         """Get AWS account ID from STS get_caller_identity."""

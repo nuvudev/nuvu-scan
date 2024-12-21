@@ -31,6 +31,28 @@ pip install nuvu-scan
 
 ## Usage
 
+### Optional: Push results to Nuvu Cloud
+
+Nuvu Scan is fully open-source and runs standalone — no account required.  
+If you want dashboards, team workflows, and long‑term history, you can optionally push results to Nuvu Cloud.
+
+```bash
+# Push results to Nuvu Cloud (optional)
+nuvu scan --provider aws --push --api-key your_nuvu_api_key
+
+# Or use environment variable
+export NUVU_API_KEY=your_nuvu_api_key
+nuvu scan --provider aws --push
+
+# Custom cloud URL (defaults to https://nuvu.dev)
+nuvu scan --provider aws --push --nuvu-cloud-url https://nuvu.dev
+```
+
+What this means for open‑source users:
+- You can keep everything local and export JSON/CSV/HTML.
+- No cloud credentials are ever sent to Nuvu Cloud — only scan results.
+- The data collected is identical whether you run locally or push.
+
 ### AWS Scanning
 
 **Prerequisites:** Create an IAM user or role with the read-only policy from `aws-iam-policy.json`. See the [AWS Setup](#aws-v1---available-now) section below for detailed instructions.
@@ -304,7 +326,7 @@ Visit [https://nuvu.dev](https://nuvu.dev) for the SaaS version with continuous 
 
 ```bash
 # Clone the repository
-git clone https://github.com/flexilogix/nuvu-scan.git
+git clone https://github.com/nuvudev/nuvu-scan.git
 cd nuvu-scan
 
 # Install uv (if not already installed)
@@ -407,7 +429,7 @@ git clone https://github.com/your-username/nuvu-scan.git
 cd nuvu-scan
 
 # Add upstream remote
-git remote add upstream https://github.com/flexilogix/nuvu-scan.git
+git remote add upstream https://github.com/nuvudev/nuvu-scan.git
 ```
 
 ### 2. Create a Branch
@@ -441,7 +463,7 @@ git push origin feature/your-feature-name
 
 ### 5. Create a Pull Request
 
-- Go to https://github.com/flexilogix/nuvu-scan
+- Go to https://github.com/nuvudev/nuvu-scan
 - Click "New Pull Request"
 - Select your branch
 - Fill out the PR template
@@ -512,7 +534,7 @@ Releases are automated via GitHub Actions:
    ```
 
 2. **Create GitHub Release:**
-   - Go to https://github.com/flexilogix/nuvu-scan/releases
+   - Go to https://github.com/nuvudev/nuvu-scan/releases
    - Click "Draft a new release"
    - Select the tag
    - Add release notes
