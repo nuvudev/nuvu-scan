@@ -14,6 +14,9 @@ class HTMLFormatter:
         actual_total = result.summary.get("total_actual_cost_30d")
         estimated_assets_total = result.summary.get("estimated_assets_cost_total")
 
+        # Calculate cost saving opportunities
+        savings_opportunities = self._calculate_savings(result.assets)
+
         summary_cards = f"""
             <div class="summary-card">
                 <h3>Total Assets</h3>
@@ -55,6 +58,15 @@ class HTMLFormatter:
             </div>
         """
 
+        # Add savings opportunity card if significant
+        if savings_opportunities["total_potential_savings"] > 100:
+            summary_cards += f"""
+            <div class="summary-card savings">
+                <h3>💰 Potential Savings</h3>
+                <div class="value">${savings_opportunities['total_potential_savings']:,.2f}/mo</div>
+            </div>
+            """
+
         # Build service costs table if available
         service_costs_html = ""
         service_costs = result.summary.get("actual_costs_30d", {})
@@ -79,14 +91,17 @@ class HTMLFormatter:
     <title>Nuvu Scan Report - {result.provider.upper()}</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }}
-        .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        .container {{ max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
         h1 {{ color: #333; border-bottom: 3px solid #4CAF50; padding-bottom: 10px; }}
         h2 {{ color: #555; margin-top: 30px; }}
-        .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }}
+        .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin: 20px 0; }}
         .summary-card {{ background: #f9f9f9; padding: 15px; border-radius: 5px; border-left: 4px solid #4CAF50; }}
-        .summary-card h3 {{ margin: 0 0 10px 0; color: #666; font-size: 14px; text-transform: uppercase; }}
-        .summary-card .value {{ font-size: 24px; font-weight: bold; color: #333; }}
+        .summary-card.savings {{ border-left-color: #ff9800; background: #fff8e1; }}
+        .summary-card h3 {{ margin: 0 0 10px 0; color: #666; font-size: 13px; text-transform: uppercase; }}
+        .summary-card .value {{ font-size: 22px; font-weight: bold; color: #333; }}
         table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+        table.compact {{ font-size: 13px; }}
+        table.compact th, table.compact td {{ padding: 8px; }}
         th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
         th {{ background: #4CAF50; color: white; font-weight: bold; }}
         tr:hover {{ background: #f5f5f5; }}
@@ -94,6 +109,22 @@ class HTMLFormatter:
         .unused {{ color: #ff8800; font-weight: bold; }}
         .no-owner {{ color: #ff4444; font-weight: bold; }}
         .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; text-align: center; }}
+        .insight-box {{ padding: 15px; border-radius: 8px; margin: 15px 0; }}
+        .insight-box h3 {{ margin-top: 0; }}
+        .insight-box.warning {{ background: #fff8e1; border-left: 4px solid #ff9800; }}
+        .insight-box.alert {{ background: #ffebee; border-left: 4px solid #f44336; }}
+        .insight-box.info {{ background: #e3f2fd; border-left: 4px solid #2196f3; }}
+        .insight-box.success {{ background: #e8f5e9; border-left: 4px solid #4caf50; }}
+        .recommendation {{ font-style: italic; color: #666; margin-top: 10px; }}
+        
+        /* Collapsible sections */
+        .collapsible {{ cursor: pointer; padding: 15px; width: 100%; border: none; text-align: left; outline: none; font-size: 18px; font-weight: bold; background: #f5f5f5; border-radius: 5px; margin-top: 20px; color: #555; display: flex; justify-content: space-between; align-items: center; }}
+        .collapsible:hover {{ background: #eee; }}
+        .collapsible:after {{ content: '▼'; font-size: 12px; color: #888; }}
+        .collapsible.active:after {{ content: '▲'; }}
+        .collapsible-content {{ display: none; overflow: hidden; padding: 0; }}
+        .collapsible-content.show {{ display: block; }}
+        .asset-count {{ font-size: 14px; font-weight: normal; color: #888; }}
     </style>
 </head>
 <body>
@@ -108,7 +139,16 @@ class HTMLFormatter:
 {summary_cards}
         </div>
 {service_costs_html}
+"""
 
+        # Add Cost Optimization Section FIRST (before Assets by Category)
+        html += self._build_cost_optimization_section(result.assets)
+
+        # Add Governance Insights Section SECOND
+        html += self._build_governance_section(result.assets)
+
+        # Assets by Category
+        html += """
         <h2>Assets by Category</h2>
         <table>
             <tr><th>Category</th><th>Count</th></tr>
@@ -117,9 +157,12 @@ class HTMLFormatter:
         for category, count in result.summary.get("assets_by_category", {}).items():
             html += f"            <tr><td>{category.replace('_', ' ').title()}</td><td>{count}</td></tr>\n"
 
-        html += """        </table>
+        # All Assets - COLLAPSIBLE
+        asset_count = len(result.assets)
+        html += f"""        </table>
 
-        <h2>All Assets</h2>
+        <button class="collapsible">All Assets <span class="asset-count">({asset_count} items)</span></button>
+        <div class="collapsible-content">
         <table>
             <tr>
                 <th>Name</th>
@@ -157,6 +200,18 @@ class HTMLFormatter:
 """
 
         html += """        </table>
+        </div>
+
+        <script>
+        var coll = document.getElementsByClassName("collapsible");
+        for (var i = 0; i < coll.length; i++) {
+            coll[i].addEventListener("click", function() {
+                this.classList.toggle("active");
+                var content = this.nextElementSibling;
+                content.classList.toggle("show");
+            });
+        }
+        </script>
 
         <div class="footer">
             <p>Generated by Nuvu - AWS Data Asset Control</p>
@@ -165,5 +220,178 @@ class HTMLFormatter:
     </div>
 </body>
 </html>"""
+
+        return html
+
+    def _calculate_savings(self, assets) -> dict:
+        """Calculate potential cost savings from assets."""
+        savings = {
+            "old_manual_snapshots": 0,
+            "stale_crawlers": 0,
+            "unused_etl_jobs": 0,
+            "reservation_opportunities": 0,
+            "total_potential_savings": 0,
+        }
+
+        for asset in assets:
+            metrics = asset.usage_metrics or {}
+
+            # Old MANUAL snapshot savings (automated snapshots are free within retention)
+            if asset.asset_type == "redshift_snapshot":
+                if metrics.get("snapshot_type") == "manual":
+                    if "old_snapshot" in (asset.risk_flags or []):
+                        savings["old_manual_snapshots"] += asset.cost_estimate_usd or 0
+
+            # Reservation savings
+            if asset.asset_type == "redshift_cluster":
+                potential = metrics.get("potential_reservation_savings_usd", 0)
+                savings["reservation_opportunities"] += potential
+
+            # Stale crawler costs
+            if asset.asset_type == "glue_crawler":
+                if "stale_crawler" in (asset.risk_flags or []):
+                    savings["stale_crawlers"] += asset.cost_estimate_usd or 0
+
+        savings["total_potential_savings"] = (
+            savings["old_manual_snapshots"]
+            + savings["reservation_opportunities"]
+            + savings["stale_crawlers"]
+        )
+
+        return savings
+
+    def _build_cost_optimization_section(self, assets) -> str:
+        """Build cost optimization recommendations section."""
+        # Filter relevant assets
+        snapshots = [a for a in assets if a.asset_type == "redshift_snapshot"]
+        manual_snapshots = [a for a in snapshots if (a.usage_metrics or {}).get("snapshot_type") == "manual"]
+        auto_snapshots = [a for a in snapshots if (a.usage_metrics or {}).get("snapshot_type") == "automated"]
+        old_manual_snapshots = [a for a in manual_snapshots if "old_snapshot" in (a.risk_flags or [])]
+        reserved_nodes = [a for a in assets if a.asset_type == "redshift_reserved_node"]
+        expiring_reservations = [a for a in reserved_nodes if "reservation_expiring_soon" in (a.risk_flags or [])]
+
+        if not snapshots and not reserved_nodes:
+            return ""
+
+        html = """
+        <h2>💰 Cost Optimization Opportunities</h2>
+        """
+
+        # Snapshot analysis - only manual snapshots are chargeable
+        if snapshots:
+            manual_snapshot_cost = sum(a.cost_estimate_usd or 0 for a in manual_snapshots)
+            old_manual_cost = sum(a.cost_estimate_usd or 0 for a in old_manual_snapshots)
+            manual_size = sum((a.size_bytes or 0) / (1024**4) for a in manual_snapshots)  # TB
+
+            html += f"""
+        <div class="insight-box warning">
+            <h3>📦 Redshift Snapshots</h3>
+            <ul>
+                <li><strong>Automated Snapshots:</strong> {len(auto_snapshots)} (included in cluster cost)</li>
+                <li><strong>Manual Snapshots:</strong> {len(manual_snapshots)} ({manual_size:.2f} TB)</li>
+                <li><strong>Manual Snapshot Cost:</strong> ${manual_snapshot_cost:,.2f}/mo</li>
+                <li><strong>Old Manual Snapshots (>90 days):</strong> {len(old_manual_snapshots)} (${old_manual_cost:,.2f}/mo potential savings)</li>
+            </ul>
+            <p class="recommendation">💡 Review old manual snapshots - automated snapshots are retained per retention policy at no extra charge.</p>
+        </div>
+            """
+
+        # Reserved nodes analysis
+        if reserved_nodes:
+            active_reservations = [a for a in reserved_nodes if (a.usage_metrics or {}).get("state") == "active"]
+            expired = [a for a in reserved_nodes if "reservation_expired" in (a.risk_flags or [])]
+
+            html += f"""
+        <div class="insight-box info">
+            <h3>🎫 Reserved Nodes ({len(reserved_nodes)} total)</h3>
+            <ul>
+                <li><strong>Active Reservations:</strong> {len(active_reservations)}</li>
+                <li><strong>Expired/Retired:</strong> {len(expired)}</li>
+                <li><strong>Expiring Soon:</strong> {len(expiring_reservations)}</li>
+            </ul>
+        </div>
+            """
+
+        return html
+
+    def _build_governance_section(self, assets) -> str:
+        """Build governance insights section."""
+        # Glue crawlers
+        crawlers = [a for a in assets if a.asset_type == "glue_crawler"]
+        stale_crawlers = [a for a in crawlers if "stale_crawler" in (a.risk_flags or []) or "never_run" in (a.risk_flags or [])]
+
+        # Glue jobs
+        jobs = [a for a in assets if a.asset_type == "glue_job"]
+        stale_jobs = [a for a in jobs if "stale_job" in (a.risk_flags or []) or "never_run" in (a.risk_flags or [])]
+
+        # Datashares
+        datashares = [a for a in assets if a.asset_type == "redshift_datashare"]
+        cross_account_shares = [a for a in datashares if "cross_account_sharing" in (a.risk_flags or [])]
+
+        # WLM issues
+        clusters = [a for a in assets if a.asset_type == "redshift_cluster"]
+        wlm_issues = [a for a in clusters if "default_wlm_only" in (a.risk_flags or []) or "unlimited_wlm_queue" in (a.risk_flags or [])]
+
+        if not any([stale_crawlers, stale_jobs, cross_account_shares, wlm_issues]):
+            return ""
+
+        html = """
+        <h2>🔍 Governance Insights</h2>
+        """
+
+        if stale_crawlers:
+            html += f"""
+        <div class="insight-box warning">
+            <h3>🕷️ Stale/Unused Glue Crawlers ({len(stale_crawlers)})</h3>
+            <table class="compact">
+                <tr><th>Name</th><th>Last Run</th><th>Issue</th></tr>
+            """
+            for crawler in stale_crawlers[:10]:
+                days = (crawler.usage_metrics or {}).get("days_since_last_run", "Never")
+                issues = ", ".join(crawler.risk_flags or [])
+                html += f"<tr><td>{crawler.name}</td><td>{days} days ago</td><td>{issues}</td></tr>"
+            html += "</table></div>"
+
+        if stale_jobs:
+            html += f"""
+        <div class="insight-box warning">
+            <h3>⚙️ Stale/Unused Glue ETL Jobs ({len(stale_jobs)})</h3>
+            <table class="compact">
+                <tr><th>Name</th><th>Last Run</th><th>Issue</th></tr>
+            """
+            for job in stale_jobs[:10]:
+                days = (job.usage_metrics or {}).get("days_since_last_run", "Never")
+                issues = ", ".join(job.risk_flags or [])
+                html += f"<tr><td>{job.name}</td><td>{days} days ago</td><td>{issues}</td></tr>"
+            html += "</table></div>"
+
+        if cross_account_shares:
+            html += f"""
+        <div class="insight-box alert">
+            <h3>🔗 Cross-Account Data Shares ({len(cross_account_shares)})</h3>
+            <p>Data is being shared outside this AWS account. Review for security compliance.</p>
+            <table class="compact">
+                <tr><th>Share Name</th><th>Consumer Account</th><th>Flags</th></tr>
+            """
+            for share in cross_account_shares[:10]:
+                consumers = (share.usage_metrics or {}).get("consumers", [])
+                consumer_ids = ", ".join(c.get("account_id", "?") for c in consumers[:3])
+                flags = ", ".join(share.risk_flags or [])
+                html += f"<tr><td>{share.name}</td><td>{consumer_ids}</td><td>{flags}</td></tr>"
+            html += "</table></div>"
+
+        if wlm_issues:
+            html += f"""
+        <div class="insight-box info">
+            <h3>⚡ WLM Configuration Review ({len(wlm_issues)} clusters)</h3>
+            <p>Some clusters may benefit from WLM tuning:</p>
+            <ul>
+            """
+            for cluster in wlm_issues[:5]:
+                queues = (cluster.usage_metrics or {}).get("wlm_queue_count", 0)
+                auto_wlm = "Yes" if (cluster.usage_metrics or {}).get("wlm_auto_wlm") else "No"
+                flags = ", ".join(f for f in (cluster.risk_flags or []) if "wlm" in f)
+                html += f"<li><strong>{cluster.name}</strong>: {queues} queues, Auto WLM: {auto_wlm} ({flags})</li>"
+            html += "</ul></div>"
 
         return html

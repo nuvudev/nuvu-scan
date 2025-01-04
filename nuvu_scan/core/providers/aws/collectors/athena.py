@@ -23,10 +23,13 @@ class AthenaCollector:
 
     def collect(self) -> list[Asset]:
         """Collect Athena workgroups."""
+        import sys
+        
         assets = []
 
         try:
             # List workgroups
+            print("  → Listing Athena workgroups...", file=sys.stderr)
             response = self.athena_client.list_work_groups()
 
             for wg_info in response.get("WorkGroups", []):
