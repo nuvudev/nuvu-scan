@@ -57,20 +57,22 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
+    "ruff>=0.8.0",
     "mypy>=1.0.0",
     "boto3-stubs[essential]>=1.28.0",
+    "pre-commit>=3.5.0",
+    "bandit>=1.7.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
+    "ruff>=0.8.0",
     "mypy>=1.0.0",
     "boto3-stubs[essential]>=1.28.0",
+    "pre-commit>=3.5.0",
+    "bandit>=1.7.0",
 ]
 
 [project.urls]
@@ -91,17 +93,37 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["nuvu_scan"]
 
-[tool.black]
-line-length = 100
-target-version = ['py310', 'py311', 'py312', 'py313']
-
 [tool.ruff]
 line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]  # Line too long (handled by black)
+select = ["E", "F", "I", "N", "W", "UP", "B", "S"]
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "S101",  # Use of assert (fine in tests)
+    "S110",  # try-except-pass (intentional for graceful degradation in collectors)
+    "S112",  # try-except-continue (intentional for multi-source fallback)
+    "S310",  # URL open (validated before use)
+    "S603",  # Subprocess call (needed for some collectors)
+    "S607",  # Partial path (needed for some collectors)
+    "S608",  # SQL injection (false positive for BigQuery - variables are internal)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = [
+    "B101",  # assert_used - fine in tests
+    "B110",  # try_except_pass - intentional for graceful degradation
+    "B112",  # try_except_continue - intentional for multi-source fallback
+    "B310",  # URL open - URL is validated/constructed internally
+    "B608",  # SQL injection - false positive for BigQuery parameterized queries
+]
 
 [tool.mypy]
 python_version = "3.10"

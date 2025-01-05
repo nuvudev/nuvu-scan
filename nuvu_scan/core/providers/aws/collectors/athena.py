@@ -24,7 +24,7 @@ class AthenaCollector:
     def collect(self) -> list[Asset]:
         """Collect Athena workgroups."""
         import sys
-        
+
         assets = []
 
         try:

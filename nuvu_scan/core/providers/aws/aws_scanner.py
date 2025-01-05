@@ -177,7 +177,7 @@ class AWSScanner(CloudProviderScan):
                 region_name=credentials.get("region", "us-east-1"),
             )
         except ClientError as e:
-            raise ValueError(f"Failed to assume role {role_arn}: {str(e)}")
+            raise ValueError(f"Failed to assume role {role_arn}: {str(e)}") from e
 
     def _resolve_regions(self) -> list[str]:
         """Resolve regions to scan. If none provided, scan all enabled regions."""
@@ -241,6 +241,7 @@ class AWSScanner(CloudProviderScan):
             unknown = set(requested_lower) - known
             if unknown:
                 import sys
+
                 print(f"Warning: Unknown collectors ignored: {', '.join(unknown)}", file=sys.stderr)
                 print(f"Available collectors: {', '.join(sorted(known))}", file=sys.stderr)
 

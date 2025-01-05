@@ -46,15 +46,15 @@ class HTMLFormatter:
         summary_cards += f"""
             <div class="summary-card">
                 <h3>Unused Assets</h3>
-                <div class="value">{result.summary.get('unused_count', 0)}</div>
+                <div class="value">{result.summary.get("unused_count", 0)}</div>
             </div>
             <div class="summary-card">
                 <h3>No Owner</h3>
-                <div class="value">{result.summary.get('no_owner_count', 0)}</div>
+                <div class="value">{result.summary.get("no_owner_count", 0)}</div>
             </div>
             <div class="summary-card">
                 <h3>Risky Assets</h3>
-                <div class="value">{result.summary.get('risky_count', 0)}</div>
+                <div class="value">{result.summary.get("risky_count", 0)}</div>
             </div>
         """
 
@@ -63,7 +63,7 @@ class HTMLFormatter:
             summary_cards += f"""
             <div class="summary-card savings">
                 <h3>💰 Potential Savings</h3>
-                <div class="value">${savings_opportunities['total_potential_savings']:,.2f}/mo</div>
+                <div class="value">${savings_opportunities["total_potential_savings"]:,.2f}/mo</div>
             </div>
             """
 
@@ -116,7 +116,6 @@ class HTMLFormatter:
         .insight-box.info {{ background: #e3f2fd; border-left: 4px solid #2196f3; }}
         .insight-box.success {{ background: #e8f5e9; border-left: 4px solid #4caf50; }}
         .recommendation {{ font-style: italic; color: #666; margin-top: 10px; }}
-        
         /* Collapsible sections */
         .collapsible {{ cursor: pointer; padding: 15px; width: 100%; border: none; text-align: left; outline: none; font-size: 18px; font-weight: bold; background: #f5f5f5; border-radius: 5px; margin-top: 20px; color: #555; display: flex; justify-content: space-between; align-items: center; }}
         .collapsible:hover {{ background: #eee; }}
@@ -194,7 +193,7 @@ class HTMLFormatter:
                 <td>{asset.asset_type}</td>
                 <td>{asset.region}</td>
                 <td>${asset.cost_estimate_usd or 0:.2f}</td>
-                <td class="{owner_class}">{asset.suggested_owner or 'Unknown'}</td>
+                <td class="{owner_class}">{asset.suggested_owner or "Unknown"}</td>
                 <td>{risk_flags_html}</td>
             </tr>
 """
@@ -264,11 +263,19 @@ class HTMLFormatter:
         """Build cost optimization recommendations section."""
         # Filter relevant assets
         snapshots = [a for a in assets if a.asset_type == "redshift_snapshot"]
-        manual_snapshots = [a for a in snapshots if (a.usage_metrics or {}).get("snapshot_type") == "manual"]
-        auto_snapshots = [a for a in snapshots if (a.usage_metrics or {}).get("snapshot_type") == "automated"]
-        old_manual_snapshots = [a for a in manual_snapshots if "old_snapshot" in (a.risk_flags or [])]
+        manual_snapshots = [
+            a for a in snapshots if (a.usage_metrics or {}).get("snapshot_type") == "manual"
+        ]
+        auto_snapshots = [
+            a for a in snapshots if (a.usage_metrics or {}).get("snapshot_type") == "automated"
+        ]
+        old_manual_snapshots = [
+            a for a in manual_snapshots if "old_snapshot" in (a.risk_flags or [])
+        ]
         reserved_nodes = [a for a in assets if a.asset_type == "redshift_reserved_node"]
-        expiring_reservations = [a for a in reserved_nodes if "reservation_expiring_soon" in (a.risk_flags or [])]
+        expiring_reservations = [
+            a for a in reserved_nodes if "reservation_expiring_soon" in (a.risk_flags or [])
+        ]
 
         if not snapshots and not reserved_nodes:
             return ""
@@ -298,7 +305,9 @@ class HTMLFormatter:
 
         # Reserved nodes analysis
         if reserved_nodes:
-            active_reservations = [a for a in reserved_nodes if (a.usage_metrics or {}).get("state") == "active"]
+            active_reservations = [
+                a for a in reserved_nodes if (a.usage_metrics or {}).get("state") == "active"
+            ]
             expired = [a for a in reserved_nodes if "reservation_expired" in (a.risk_flags or [])]
 
             html += f"""
@@ -318,19 +327,34 @@ class HTMLFormatter:
         """Build governance insights section."""
         # Glue crawlers
         crawlers = [a for a in assets if a.asset_type == "glue_crawler"]
-        stale_crawlers = [a for a in crawlers if "stale_crawler" in (a.risk_flags or []) or "never_run" in (a.risk_flags or [])]
+        stale_crawlers = [
+            a
+            for a in crawlers
+            if "stale_crawler" in (a.risk_flags or []) or "never_run" in (a.risk_flags or [])
+        ]
 
         # Glue jobs
         jobs = [a for a in assets if a.asset_type == "glue_job"]
-        stale_jobs = [a for a in jobs if "stale_job" in (a.risk_flags or []) or "never_run" in (a.risk_flags or [])]
+        stale_jobs = [
+            a
+            for a in jobs
+            if "stale_job" in (a.risk_flags or []) or "never_run" in (a.risk_flags or [])
+        ]
 
         # Datashares
         datashares = [a for a in assets if a.asset_type == "redshift_datashare"]
-        cross_account_shares = [a for a in datashares if "cross_account_sharing" in (a.risk_flags or [])]
+        cross_account_shares = [
+            a for a in datashares if "cross_account_sharing" in (a.risk_flags or [])
+        ]
 
         # WLM issues
         clusters = [a for a in assets if a.asset_type == "redshift_cluster"]
-        wlm_issues = [a for a in clusters if "default_wlm_only" in (a.risk_flags or []) or "unlimited_wlm_queue" in (a.risk_flags or [])]
+        wlm_issues = [
+            a
+            for a in clusters
+            if "default_wlm_only" in (a.risk_flags or [])
+            or "unlimited_wlm_queue" in (a.risk_flags or [])
+        ]
 
         if not any([stale_crawlers, stale_jobs, cross_account_shares, wlm_issues]):
             return ""
