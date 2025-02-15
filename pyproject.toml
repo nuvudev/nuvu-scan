@@ -1,28 +1,47 @@
 [project]
 name = "nuvu-scan"
-version = "1.3.8"
-description = "Multi-Cloud Data Asset Control - CLI tool for discovering and analyzing cloud data infrastructure"
+version = "2.0.0"
+description = "Multi-Cloud Data Asset Control - Discover, govern, and optimize your cloud data assets across AWS and GCP"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "Nuvu", email = "info@nuvu.dev"}
 ]
-keywords = ["aws", "cloud", "data", "governance", "infrastructure", "scanning"]
+keywords = [
+    "aws",
+    "gcp",
+    "cloud",
+    "data",
+    "governance",
+    "infrastructure",
+    "scanning",
+    "redshift",
+    "glue",
+    "s3",
+    "bigquery",
+    "cost-optimization",
+    "data-catalog",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
     "Topic :: System :: Systems Administration",
+    "Topic :: Database :: Database Engines/Servers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
 ]
 
 dependencies = [
     "boto3>=1.28.0",
+    "botocore>=1.31.0",
     "click>=8.0.0",
     "google-cloud-storage>=2.10.0",
     "google-cloud-bigquery>=3.11.0",
@@ -31,24 +50,29 @@ dependencies = [
     "google-auth>=2.23.0",
     "google-api-python-client>=2.100.0",
     "google-cloud-billing>=1.11.0",
+    "google-cloud-monitoring>=2.16.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
+    "ruff>=0.8.0",
     "mypy>=1.0.0",
+    "boto3-stubs[essential]>=1.28.0",
+    "pre-commit>=3.5.0",
+    "bandit>=1.7.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
+    "ruff>=0.8.0",
     "mypy>=1.0.0",
+    "boto3-stubs[essential]>=1.28.0",
+    "pre-commit>=3.5.0",
+    "bandit>=1.7.0",
 ]
 
 [project.urls]
@@ -56,26 +80,50 @@ Homepage = "https://nuvu.dev"
 Documentation = "https://github.com/nuvudev/nuvu-scan#readme"
 Repository = "https://github.com/nuvudev/nuvu-scan"
 Issues = "https://github.com/nuvudev/nuvu-scan/issues"
+Changelog = "https://github.com/nuvudev/nuvu-scan/blob/main/CHANGELOG.md"
 
 [project.scripts]
 nuvu = "nuvu_scan.cli.main:cli"
+nuvu-scan = "nuvu_scan.cli.main:cli"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-
-[tool.black]
-line-length = 100
-target-version = ['py310', 'py311', 'py312', 'py313']
+[tool.hatch.build.targets.wheel]
+packages = ["nuvu_scan"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]  # Line too long (handled by black)
+select = ["E", "F", "I", "N", "W", "UP", "B", "S"]
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "S101",  # Use of assert (fine in tests)
+    "S110",  # try-except-pass (intentional for graceful degradation in collectors)
+    "S112",  # try-except-continue (intentional for multi-source fallback)
+    "S310",  # URL open (validated before use)
+    "S603",  # Subprocess call (needed for some collectors)
+    "S607",  # Partial path (needed for some collectors)
+    "S608",  # SQL injection (false positive for BigQuery - variables are internal)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = [
+    "B101",  # assert_used - fine in tests
+    "B110",  # try_except_pass - intentional for graceful degradation
+    "B112",  # try_except_continue - intentional for multi-source fallback
+    "B310",  # URL open - URL is validated/constructed internally
+    "B608",  # SQL injection - false positive for BigQuery parameterized queries
+]
 
 [tool.mypy]
 python_version = "3.10"

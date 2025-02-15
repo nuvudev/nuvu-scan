@@ -21,10 +21,13 @@ class NormalizedCategory(str, Enum):
     ML_TRAINING = "ml_training"
     DATA_CATALOG = "data_catalog"
     DATA_INTEGRATION = "data_integration"
+    DATA_PIPELINE = "data_pipeline"  # ETL jobs, crawlers, workflows
+    DATA_SHARING = "data_sharing"  # Datashares, cross-account sharing
     QUERY_ENGINE = "query_engine"
     SEARCH = "search"
     DATABASE = "database"
     SECURITY = "security"
+    BILLING = "billing"
 
 
 @dataclass
@@ -66,10 +69,13 @@ class ScanConfig:
     credentials: dict[str, Any]  # Provider-specific credentials
     regions: list[str] = None  # None means all regions
     account_id: str | None = None
+    collectors: list[str] = None  # None means all collectors, otherwise filter by name
 
     def __post_init__(self):
         if self.regions is None:
             self.regions = []
+        if self.collectors is None:
+            self.collectors = []
 
 
 @dataclass
