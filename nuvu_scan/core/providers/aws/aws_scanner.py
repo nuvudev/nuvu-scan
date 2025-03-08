@@ -8,7 +8,13 @@ from typing import Any
 
 import boto3
 
-from nuvu_scan.core.base import Asset, CloudProviderScan, NormalizedCategory, ScanConfig
+from nuvu_scan.core.base import (
+    Asset,
+    CloudProviderScan,
+    NormalizedCategory,
+    ScanConfig,
+    ScanResult,
+)
 
 from .collectors.athena import AthenaCollector
 from .collectors.cost_explorer import CostExplorerCollector
@@ -135,39 +141,99 @@ class AWSScanner(CloudProviderScan):
                 region_name=credentials.get("region", "us-east-1"),
             )
         except ClientError as e:
-            raise ValueError(f"Failed to assume role {role_arn}: {str(e)}")
+            raise ValueError(f"Failed to assume role {role_arn}: {str(e)}") from e
+
+    def _resolve_regions(self) -> list[str]:
+        """Resolve regions to scan. If none provided, scan all enabled regions."""
+        try:
+            ec2 = self.session.client("ec2", region_name="us-east-1")
+            response = ec2.describe_regions(AllRegions=False)
+            regions = [region["RegionName"] for region in response.get("Regions", [])]
+            if regions:
+                return regions
+        except Exception:
+            pass
+        return ["us-east-1"]
+
+    def _get_account_id(self) -> str:
+        """Get AWS account ID from STS get_caller_identity."""
+        try:
+            sts_client = self.session.client("sts", region_name="us-east-1")
+            identity = sts_client.get_caller_identity()
+            return identity.get("Account", "unknown")
+        except Exception:
+            # If we can't get account ID, return "unknown"
+            return "unknown"
+
+    # Map of collector names to their classes for filtering
+    COLLECTOR_MAP = {
+        "s3": S3Collector,
+        "glue": GlueCollector,
+        "athena": AthenaCollector,
+        "redshift": RedshiftCollector,
+        "iam": IAMCollector,
+        "mwaa": MWAACollector,
+    }
+
+    @classmethod
+    def get_available_collectors(cls) -> list[str]:
+        """Return list of available collector names."""
+        return list(cls.COLLECTOR_MAP.keys())
 
     def _initialize_collectors(self) -> list:
-        """Initialize all AWS service collectors."""
+        """Initialize AWS service collectors based on config."""
         collectors = []
 
-        # Initialize collectors for each service
-        collectors.append(S3Collector(self.session, self.config.regions))
-        collectors.append(GlueCollector(self.session, self.config.regions))
-        collectors.append(AthenaCollector(self.session, self.config.regions))
-        collectors.append(RedshiftCollector(self.session, self.config.regions))
-        collectors.append(IAMCollector(self.session, self.config.regions))
-        collectors.append(MWAACollector(self.session, self.config.regions))
+        # Get requested collectors from config
+        requested = self.config.collectors if self.config.collectors else []
 
-        # TODO: Add more collectors as needed
-        # collectors.append(OpenSearchCollector(self.session, self.config.regions))
-        # collectors.append(EMRCollector(self.session, self.config.regions))
-        # collectors.append(SageMakerCollector(self.session, self.config.regions))
-        # etc.
+        # Normalize to lowercase
+        requested_lower = [c.lower() for c in requested]
+
+        # If no specific collectors requested, use all
+        if not requested_lower:
+            for collector_cls in self.COLLECTOR_MAP.values():
+                collectors.append(collector_cls(self.session, self.config.regions))
+        else:
+            # Filter to only requested collectors
+            for name, collector_cls in self.COLLECTOR_MAP.items():
+                if name in requested_lower:
+                    collectors.append(collector_cls(self.session, self.config.regions))
+
+            # Warn about unknown collectors
+            known = set(self.COLLECTOR_MAP.keys())
+            unknown = set(requested_lower) - known
+            if unknown:
+                import sys
+
+                print(f"Warning: Unknown collectors ignored: {', '.join(unknown)}", file=sys.stderr)
+                print(f"Available collectors: {', '.join(sorted(known))}", file=sys.stderr)
 
         return collectors
 
     def list_assets(self) -> list[Asset]:
         """Discover all AWS assets across all collectors."""
         all_assets = []
+        import sys
 
-        for collector in self.collectors:
+        collector_names = [c.__class__.__name__ for c in self.collectors]
+        print(f"Scanning with collectors: {', '.join(collector_names)}", file=sys.stderr)
+
+        for i, collector in enumerate(self.collectors, 1):
+            collector_name = collector.__class__.__name__
+            print(
+                f"[{i}/{len(self.collectors)}] Collecting from {collector_name}...", file=sys.stderr
+            )
             try:
                 assets = collector.collect()
                 all_assets.extend(assets)
+                print(
+                    f"[{i}/{len(self.collectors)}] {collector_name}: Found {len(assets)} assets",
+                    file=sys.stderr,
+                )
             except Exception as e:
                 # Log error but continue with other collectors
-                print(f"Error collecting from {collector.__class__.__name__}: {e}")
+                print(f"Error collecting from {collector_name}: {e}", file=sys.stderr)
                 continue
 
         # Add a summary asset with actual costs from Cost Explorer
@@ -180,36 +246,34 @@ class AWSScanner(CloudProviderScan):
 
             if service_costs:
                 total_actual_cost = sum(service_costs.values())
-                # Convert to monthly estimate
-                days_in_period = (end_date - start_date).days
-                if days_in_period > 0:
-                    daily_avg = total_actual_cost / days_in_period
-                    monthly_estimate = daily_avg * 30
+                # Use the actual 30-day cost as monthly estimate
+                # This represents the actual spend, not an extrapolation
+                monthly_estimate = total_actual_cost
 
-                    # Create a summary asset
-                    cost_summary_asset = Asset(
-                        provider="aws",
-                        asset_type="cost_summary",
-                        normalized_category=NormalizedCategory.SECURITY,  # Using security as placeholder
-                        service="Cost Explorer",
-                        region="global",
-                        arn="arn:aws:ce::cost-summary",
-                        name="AWS Cost Summary (Last 30 Days)",
-                        created_at=None,
-                        last_activity_at=datetime.utcnow().isoformat(),
-                        tags={},
-                        cost_estimate_usd=monthly_estimate,
-                        risk_flags=[],
-                        ownership_confidence="unknown",
-                        suggested_owner=None,
-                        usage_metrics={
-                            "actual_costs_30d": service_costs,
-                            "total_actual_cost_30d": total_actual_cost,
-                            "estimated_monthly_cost": monthly_estimate,
-                            "note": "Actual costs from AWS Cost Explorer API. Note: Some costs shown are for services that are not data assets (e.g., domain registration, email services, DNS). Individual asset costs below are estimates based on resource usage.",
-                        },
-                    )
-                    all_assets.append(cost_summary_asset)
+                # Create a summary asset
+                cost_summary_asset = Asset(
+                    provider="aws",
+                    asset_type="cost_summary",
+                    normalized_category=NormalizedCategory.BILLING,
+                    service="Cost Explorer",
+                    region="global",
+                    arn="arn:aws:ce::cost-summary",
+                    name="AWS Cost Summary (Last 30 Days)",
+                    created_at=None,
+                    last_activity_at=datetime.utcnow().isoformat(),
+                    tags={},
+                    cost_estimate_usd=monthly_estimate,
+                    risk_flags=[],
+                    ownership_confidence="unknown",
+                    suggested_owner=None,
+                    usage_metrics={
+                        "actual_costs_30d": service_costs,
+                        "total_actual_cost_30d": total_actual_cost,
+                        "estimated_monthly_cost": monthly_estimate,
+                        "note": "Actual costs from AWS Cost Explorer API for the last 30 days. This represents real spend, not estimates. Note: Some costs shown are for services that are not data assets (e.g., domain registration, email services, DNS). Individual asset costs below may be estimates based on resource usage.",
+                    },
+                )
+                all_assets.append(cost_summary_asset)
         except Exception as e:
             # If Cost Explorer fails, continue without summary
             import sys
@@ -235,7 +299,11 @@ class AWSScanner(CloudProviderScan):
         return {}
 
     def get_cost_estimate(self, asset: Asset) -> float:
-        """Estimate monthly cost for an AWS asset."""
+        """Estimate monthly cost for an AWS asset.
+
+        First tries to get actual cost from Cost Explorer API.
+        Falls back to collector-based estimates if Cost Explorer data is not available.
+        """
         # First, try to get actual cost from Cost Explorer API
         try:
             # Map service names to Cost Explorer service names
@@ -249,15 +317,16 @@ class AWSScanner(CloudProviderScan):
 
             cost_explorer_service = service_mapping.get(asset.service)
             if cost_explorer_service:
-                # Get service-level cost from Cost Explorer
+                # Get service-level cost from Cost Explorer (last 30 days actual cost)
                 service_cost = self.cost_explorer.get_monthly_cost_for_service(
                     cost_explorer_service
                 )
                 if service_cost > 0:
-                    # If we have service-level cost, we can use it as a baseline
-                    # For now, we'll use the collector's estimate if available,
-                    # but if it's 0 and we have service cost, we'll use a portion
-                    # This is a heuristic - ideally we'd have per-resource costs
+                    # We have actual service-level cost from Cost Explorer
+                    # For now, we'll still use collector estimates for individual assets
+                    # because Cost Explorer doesn't provide per-resource costs without tags
+                    # But we could potentially distribute service cost across assets proportionally
+                    # For now, prefer collector estimates which are more accurate per-resource
                     pass  # Continue to collector-based estimation
 
         except Exception:
