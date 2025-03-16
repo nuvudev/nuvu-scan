@@ -98,24 +98,18 @@ from ..formatters.json import JSONFormatter
 @click.option(
     "--push",
     is_flag=True,
-    help="Push scan results to Nuvu Cloud (requires API key)",
-)
-@click.option(
-    "--nuvu-cloud-url",
-    envvar="NUVU_CLOUD_URL",
-    default="https://nuvu.dev",
-    show_default=True,
-    help="Nuvu Cloud base URL",
+    help="Push scan results to Nuvu Cloud (requires --api-key)",
 )
 @click.option(
     "--api-key",
     envvar="NUVU_API_KEY",
-    help="Nuvu Cloud API key (from dashboard account settings)",
+    help="Nuvu Cloud API key for pushing results (default: from NUVU_API_KEY env var)",
 )
 @click.option(
-    "--list-collectors",
-    is_flag=True,
-    help="List available collectors for the specified provider and exit",
+    "--api-url",
+    envvar="NUVU_API_URL",
+    default="https://nuvu.dev",
+    help="Nuvu Cloud API URL (default: https://nuvu.dev)",
 )
 def scan_command(
     provider: str,
@@ -134,8 +128,8 @@ def scan_command(
     gcp_credentials: str | None,
     gcp_project: str | None,
     push: bool,
-    nuvu_cloud_url: str | None,
     api_key: str | None,
+    api_url: str,
     list_collectors: bool,
 ):
     """Scan cloud provider for data assets."""
@@ -311,41 +305,71 @@ def scan_command(
             f.write(content)
         click.echo(f"Report written to {output_file}", err=True)
 
+    # Push to Nuvu Cloud if requested
     if push:
-        if not nuvu_cloud_url:
-            click.echo("Error: --nuvu-cloud-url or NUVU_CLOUD_URL is required for --push", err=True)
-            sys.exit(1)
         if not api_key:
-            click.echo("Error: --api-key or NUVU_API_KEY is required for --push", err=True)
+            click.echo(
+                "Error: --api-key required for pushing results (or set NUVU_API_KEY env var)",
+                err=True,
+            )
             sys.exit(1)
 
-        payload = json.loads(JSONFormatter().format(result))
-        payload["scan_regions"] = list(region) if region else None
-        payload["scan_all_regions"] = False if region else True
-
-        import_url = nuvu_cloud_url.rstrip("/") + "/api/scans/import"
-        request = Request(
-            import_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-            method="POST",
-        )
-
+        click.echo(f"Pushing results to Nuvu Cloud ({api_url})...", err=True)
         try:
-            with urlopen(request) as response:
-                response_body = response.read().decode("utf-8")
-                click.echo(f"Scan uploaded to Nuvu Cloud: {response.status}", err=True)
-                if response_body:
-                    click.echo(response_body, err=True)
-        except HTTPError as e:
-            error_body = e.read().decode("utf-8")
-            click.echo(f"Failed to upload scan: {e.code} {e.reason}", err=True)
-            if error_body:
-                click.echo(error_body, err=True)
+            import httpx
+
+            # Prepare payload matching ScanImport schema
+            # Extract unique regions from assets
+            scan_regions = list(set(asset.region for asset in result.assets if asset.region))
+
+            payload = {
+                "provider": provider,
+                "account_id": result.account_id or "unknown",
+                "scan_timestamp": result.scan_timestamp or datetime.utcnow().isoformat(),
+                "total_cost_estimate_usd": result.total_cost_estimate_usd,
+                "scan_regions": scan_regions if scan_regions else None,
+                "scan_all_regions": not bool(region),
+                "assets": [
+                    {
+                        "provider": asset.provider,
+                        "asset_type": asset.asset_type,
+                        "normalized_category": asset.normalized_category.value if asset.normalized_category else "unknown",
+                        "service": asset.service or asset.asset_type.split("_")[0] if asset.asset_type else "unknown",
+                        "region": asset.region,
+                        "arn": asset.arn,
+                        "name": asset.name,
+                        "created_at": asset.created_at,
+                        "last_activity_at": asset.last_activity_at,
+                        "size_bytes": asset.size_bytes,
+                        "tags": asset.tags,
+                        "cost_estimate_usd": asset.cost_estimate_usd,
+                        "risk_flags": asset.risk_flags,
+                        "ownership_confidence": asset.ownership_confidence or "unknown",
+                        "suggested_owner": asset.suggested_owner,
+                    }
+                    for asset in result.assets
+                ],
+            }
+
+            # Push to API using the /api/scans/import endpoint
+            with httpx.Client(timeout=60) as client:
+                response = client.post(
+                    f"{api_url.rstrip('/')}/api/scans/import",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                response.raise_for_status()
+                result_data = response.json()
+                click.echo(
+                    f"✓ Pushed {len(result.assets)} assets to Nuvu Cloud (scan_id: {result_data.get('id', 'N/A')})",
+                    err=True,
+                )
+        except httpx.HTTPStatusError as e:
+            click.echo(f"Error pushing to Nuvu Cloud: {e.response.status_code} - {e.response.text}", err=True)
             sys.exit(1)
-        except URLError as e:
-            click.echo(f"Failed to upload scan: {e.reason}", err=True)
+        except Exception as e:
+            click.echo(f"Error pushing to Nuvu Cloud: {e}", err=True)
             sys.exit(1)
