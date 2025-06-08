@@ -2,12 +2,9 @@
 Scan command for Nuvu CLI.
 """
 
-import json
 import os
 import sys
 from datetime import datetime
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 import click
 
@@ -333,8 +330,12 @@ def scan_command(
                     {
                         "provider": asset.provider,
                         "asset_type": asset.asset_type,
-                        "normalized_category": asset.normalized_category.value if asset.normalized_category else "unknown",
-                        "service": asset.service or asset.asset_type.split("_")[0] if asset.asset_type else "unknown",
+                        "normalized_category": asset.normalized_category.value
+                        if asset.normalized_category
+                        else "unknown",
+                        "service": asset.service or asset.asset_type.split("_")[0]
+                        if asset.asset_type
+                        else "unknown",
                         "region": asset.region,
                         "arn": asset.arn,
                         "name": asset.name,
@@ -368,7 +369,10 @@ def scan_command(
                     err=True,
                 )
         except httpx.HTTPStatusError as e:
-            click.echo(f"Error pushing to Nuvu Cloud: {e.response.status_code} - {e.response.text}", err=True)
+            click.echo(
+                f"Error pushing to Nuvu Cloud: {e.response.status_code} - {e.response.text}",
+                err=True,
+            )
             sys.exit(1)
         except Exception as e:
             click.echo(f"Error pushing to Nuvu Cloud: {e}", err=True)
