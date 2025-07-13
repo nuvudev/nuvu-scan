@@ -108,6 +108,11 @@ from ..formatters.json import JSONFormatter
     default="https://nuvu.dev",
     help="Nuvu Cloud API URL (default: https://nuvu.dev)",
 )
+@click.option(
+    "--list-collectors",
+    is_flag=True,
+    help="List available collectors for the specified provider and exit.",
+)
 def scan_command(
     provider: str,
     output_format: str,
