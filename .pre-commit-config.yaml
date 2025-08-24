@@ -34,6 +34,17 @@ repos:
         args: ["-c", "pyproject.toml"]
         additional_dependencies: ["bandit[toml]"]
 
+  # Run tests before commit
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest tests/ -x -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
 # Configuration
 ci:
   autofix_commit_msg: |
