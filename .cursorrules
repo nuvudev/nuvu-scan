@@ -1,0 +1,103 @@
+# Nuvu Scan - AI Agent Instructions
+
+## Project Overview
+Nuvu Scan is an open-source CLI tool for cloud data governance. It scans AWS and GCP to discover, govern, and optimize cloud data assets.
+
+## Critical Rules for AI Agents
+
+### 1. ALWAYS Write Tests for New Features
+Every new feature, CLI option, or code change MUST include corresponding tests:
+
+- **CLI changes**: Add tests in `tests/test_cli.py`
+- **Formatter changes**: Add tests in `tests/test_formatters.py`
+- **Scanner/collector changes**: Add tests in `tests/test_scanners.py`
+- **API/push changes**: Add tests in `tests/test_push_payload.py`
+- **New collectors**: Create `tests/test_<collector_name>.py`
+
+Tests run automatically on every commit via pre-commit hooks. Commits will be blocked if tests fail.
+
+### 2. Code Quality Standards
+- Use `ruff` for linting and formatting (NOT black)
+- Run `uv run ruff format .` before committing
+- Run `uv run ruff check .` to check for issues
+- Pre-commit hooks will auto-run: ruff, ruff-format, bandit, pytest
+
+### 3. CLI Option Changes
+When adding/modifying CLI options:
+1. Add `@click.option()` decorator in `nuvu_scan/cli/commands/scan.py`
+2. Add corresponding function parameter
+3. Add test in `tests/test_cli.py` to verify option exists
+4. Update `README.md` with usage examples
+
+### 4. Push Payload Format (API Compatibility)
+When modifying push functionality:
+- Payload MUST match the schema expected by `/api/scans/import`
+- Required fields: `provider`, `account_id`, `scan_timestamp`, `assets`, `total_cost_estimate_usd`
+- Asset fields: `provider`, `asset_type`, `normalized_category`, `region`, `arn`, `name`
+- Add tests in `tests/test_push_payload.py` to verify format
+
+### 5. Normalized Categories
+Use only these categories from `NormalizedCategory` enum:
+- OBJECT_STORAGE, DATA_WAREHOUSE, STREAMING, COMPUTE, ML_TRAINING
+- DATA_CATALOG, DATA_INTEGRATION, DATA_PIPELINE, DATA_SHARING
+- QUERY_ENGINE, SEARCH, DATABASE, SECURITY, BILLING
+
+### 6. Adding New Collectors
+When adding a new AWS/GCP collector:
+1. Create collector in `nuvu_scan/core/providers/<provider>/collectors/<name>.py`
+2. Register in the scanner's collector list
+3. Add to `--list-collectors` output
+4. Update `README.md` with new service coverage
+5. Create tests with mocked API responses
+6. Update IAM policy if new permissions needed
+
+### 7. Dependencies
+- Use `uv` for package management (NOT pip directly)
+- Add dependencies to `pyproject.toml`
+- Run `uv sync --dev` after adding dependencies
+
+### 8. Testing Commands
+```bash
+# Run all tests
+uv run pytest
+
+# Run with coverage
+uv run pytest --cov=nuvu_scan
+
+# Run specific test file
+uv run pytest tests/test_cli.py
+
+# Run pre-commit checks (includes tests)
+uv run pre-commit run --all-files
+```
+
+### 9. File Structure
+```
+nuvu_scan/
+├── cli/
+│   ├── commands/scan.py     # CLI commands and options
+│   └── formatters/          # HTML, JSON, CSV output
+├── core/
+│   ├── base.py              # Asset, ScanResult, NormalizedCategory
+│   └── providers/
+│       ├── aws/collectors/  # S3, Glue, Redshift, etc.
+│       └── gcp/collectors/  # GCS, BigQuery, etc.
+tests/
+├── test_cli.py              # CLI option tests
+├── test_formatters.py       # Output format tests
+├── test_scanners.py         # Scanner tests
+└── test_push_payload.py     # API payload tests
+```
+
+### 10. Commit Guidelines
+- Pre-commit hooks will run automatically
+- All tests must pass before commit is accepted
+- Use conventional commit messages: `feat:`, `fix:`, `test:`, `docs:`, `chore:`
+
+## Summary
+**Before any code change is complete, ensure:**
+1. ✅ Tests are written/updated
+2. ✅ `uv run pytest` passes
+3. ✅ `uv run ruff check .` passes
+4. ✅ README.md is updated (if user-facing)
+5. ✅ Pre-commit hooks pass on commit

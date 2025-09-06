@@ -307,8 +307,8 @@ nuvu scan --provider aws --push --api-key your_nuvu_api_key
 export NUVU_API_KEY=your_nuvu_api_key
 nuvu scan --provider aws --push
 
-# Custom cloud URL (defaults to https://nuvu.dev)
-nuvu scan --provider aws --push --nuvu-cloud-url https://nuvu.dev
+# Custom API URL (defaults to https://nuvu.dev)
+nuvu scan --provider aws --push --api-url https://your-api.example.com
 ```
 
 What this means for open‑source users:
@@ -366,14 +366,17 @@ uv run pytest tests/test_s3_collector.py
 ### Code Quality
 
 ```bash
-# Format code with black
-uv run black .
+# Format code with ruff
+uv run ruff format .
 
 # Lint with ruff
 uv run ruff check .
 
 # Type checking with mypy
 uv run mypy nuvu_scan
+
+# Run all pre-commit checks (including tests)
+uv run pre-commit run --all-files
 ```
 
 ### Building the Package
@@ -456,11 +459,11 @@ git checkout -b fix/your-bug-description
 
 ### 3. Make Changes
 
-- Follow the existing code style (enforced by black and ruff)
-- Add tests for new features
+- Follow the existing code style (enforced by ruff)
+- **Add tests for new features** (required - pre-commit runs tests)
 - Update documentation as needed
 - Ensure all tests pass: `uv run pytest`
-- Run code quality checks: `uv run black . && uv run ruff check .`
+- Run code quality checks: `uv run ruff format . && uv run ruff check .`
 
 ### 4. Commit and Push
 

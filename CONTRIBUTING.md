@@ -30,14 +30,22 @@ cd nuvu-scan
 uv sync --dev  # Creates .venv automatically, no activation needed!
 ```
 
-### 2. Make Changes
+### 2. Install Pre-commit Hooks
+
+```bash
+uv run pre-commit install
+```
+
+This ensures tests and linting run automatically on every commit.
+
+### 3. Make Changes
 
 - Write clear, readable code
-- Follow existing code style (enforced by black and ruff)
-- Add tests for new functionality
+- Follow existing code style (enforced by ruff)
+- **⚠️ Add tests for new functionality** (required - commits will fail without tests)
 - Update documentation
 
-### 3. Test Your Changes
+### 4. Test Your Changes
 
 ```bash
 # Run all tests (uv automatically uses .venv)
@@ -47,23 +55,30 @@ uv run pytest
 uv run pytest --cov=nuvu_scan
 
 # Check code quality
-uv run black .
+uv run ruff format .
 uv run ruff check .
 uv run mypy nuvu_scan
+
+# Run all pre-commit checks (recommended)
+uv run pre-commit run --all-files
 ```
 
 **Note**: No need to activate `.venv` - `uv run` handles it automatically!
 
-### 4. Commit
+### 5. Commit
 
-Use clear, descriptive commit messages:
+Pre-commit hooks will automatically run ruff, bandit, and pytest. If any check fails, the commit will be blocked.
+
+Use conventional commit messages:
 
 ```bash
-git commit -m "Add GCP BigQuery collector"
-git commit -m "Fix S3 bucket size calculation"
+git commit -m "feat: add GCP BigQuery collector"
+git commit -m "fix: correct S3 bucket size calculation"
+git commit -m "test: add tests for Redshift collector"
+git commit -m "docs: update CLI options in README"
 ```
 
-### 5. Push and Create PR
+### 6. Push and Create PR
 
 ```bash
 git push origin feature/your-feature
@@ -93,10 +108,22 @@ See the detailed guide in README.md under "Adding a New Cloud Provider".
 
 ## Code Style
 
-- **Formatting**: Use `black` (line length: 100)
-- **Linting**: Use `ruff`
+- **Formatting**: Use `ruff format`
+- **Linting**: Use `ruff check`
 - **Type hints**: Add type hints where helpful
 - **Docstrings**: Add docstrings for public functions/classes
+
+## Testing Requirements
+
+**Every new feature MUST include tests.** Pre-commit hooks run `pytest` automatically.
+
+| Change Type | Test File |
+|-------------|-----------|
+| CLI options | `tests/test_cli.py` |
+| Formatters (HTML/JSON/CSV) | `tests/test_formatters.py` |
+| Scanners/Collectors | `tests/test_scanners.py` |
+| Push/API changes | `tests/test_push_payload.py` |
+| New collector | `tests/test_<collector>.py` |
 
 ## Pull Request Process
 
