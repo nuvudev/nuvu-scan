@@ -14,48 +14,79 @@ from nuvu_scan.core.base import Asset, NormalizedCategory
 
 
 class GlueCollector:
-    """Collects AWS Glue Data Catalog resources."""
+    """Collects AWS Glue Data Catalog resources across all regions."""
 
     def __init__(self, session: boto3.Session, regions: list[str] | None = None):
         self.session = session
-        self.regions = regions or ["us-east-1"]  # Glue is regional but catalog is global
-        self.region = self.regions[0] if self.regions else "us-east-1"
-        self.glue_client = session.client("glue", region_name=self.region)
+        self.regions = regions or []
+        # These will be set per-region during collection
+        self.glue_client = None
+        self.region = None
         # Cache crawler run times to associate with tables
         self._crawler_last_runs: dict[str, datetime | None] = {}
         self._db_to_crawler: dict[str, str] = {}
 
+    def _get_all_regions(self) -> list[str]:
+        """Get all enabled AWS regions."""
+        try:
+            ec2 = self.session.client("ec2", region_name="us-east-1")
+            response = ec2.describe_regions(AllRegions=False)
+            return [r["RegionName"] for r in response.get("Regions", [])]
+        except ClientError:
+            # Fallback to common regions
+            return ["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"]
+
     def collect(self) -> list[Asset]:
-        """Collect all Glue resources: databases, tables, crawlers, jobs, connections."""
+        """Collect all Glue resources across all regions."""
         import sys
 
-        assets = []
+        all_assets = []
 
-        # First, collect crawlers to build database-to-crawler mapping
-        print("  → Collecting Glue crawlers...", file=sys.stderr)
-        crawler_assets = self._collect_crawlers()
-        assets.extend(crawler_assets)
-        print(f"  → Found {len(crawler_assets)} crawlers", file=sys.stderr)
+        # If no regions specified, get all enabled regions
+        regions_to_check = self.regions if self.regions else self._get_all_regions()
 
-        # Collect ETL jobs
-        print("  → Collecting Glue ETL jobs...", file=sys.stderr)
-        job_assets = self._collect_jobs()
-        assets.extend(job_assets)
-        print(f"  → Found {len(job_assets)} jobs", file=sys.stderr)
+        print(
+            f"  → Checking {len(regions_to_check)} regions for Glue resources...", file=sys.stderr
+        )
 
-        # Collect connections
-        print("  → Collecting Glue connections...", file=sys.stderr)
-        conn_assets = self._collect_connections()
-        assets.extend(conn_assets)
-        print(f"  → Found {len(conn_assets)} connections", file=sys.stderr)
+        total_crawlers = 0
+        total_jobs = 0
+        total_connections = 0
+        total_dbs = 0
 
-        # Collect databases and tables (using crawler info for last_activity)
-        print("  → Collecting Glue databases and tables...", file=sys.stderr)
-        db_assets = self._collect_databases_and_tables()
-        assets.extend(db_assets)
-        print(f"  → Found {len(db_assets)} databases/tables", file=sys.stderr)
+        for region in regions_to_check:
+            # Set up client for this region
+            self.region = region
+            self.glue_client = self.session.client("glue", region_name=region)
+            self._crawler_last_runs = {}
+            self._db_to_crawler = {}
 
-        return assets
+            # Collect crawlers
+            crawler_assets = self._collect_crawlers()
+            all_assets.extend(crawler_assets)
+            total_crawlers += len(crawler_assets)
+
+            # Collect ETL jobs
+            job_assets = self._collect_jobs()
+            all_assets.extend(job_assets)
+            total_jobs += len(job_assets)
+
+            # Collect connections
+            conn_assets = self._collect_connections()
+            all_assets.extend(conn_assets)
+            total_connections += len(conn_assets)
+
+            # Collect databases and tables
+            db_assets = self._collect_databases_and_tables()
+            all_assets.extend(db_assets)
+            total_dbs += len(db_assets)
+
+        print(f"  → Found {total_crawlers} crawlers", file=sys.stderr)
+        print(f"  → Found {total_jobs} jobs", file=sys.stderr)
+        print(f"  → Found {total_connections} connections", file=sys.stderr)
+        print(f"  → Found {total_dbs} databases/tables", file=sys.stderr)
+
+        return all_assets
 
     def _collect_crawlers(self) -> list[Asset]:
         """Collect Glue Crawlers with detailed status."""
