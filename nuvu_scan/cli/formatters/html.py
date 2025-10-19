@@ -133,6 +133,12 @@ class HTMLFormatter:
         <p><strong>Account ID:</strong> {result.account_id}</p>
         <p><strong>Scan Time:</strong> {result.scan_timestamp}</p>
 
+        <h2>📋 Scan Scope</h2>
+        <div class="insight-box info">
+            <p><strong>Collectors:</strong> {', '.join(result.scanned_collectors) if result.scanned_collectors else 'All (Full Scan)'}</p>
+            <p><strong>Regions:</strong> {', '.join(result.scanned_regions[:10]) if result.scanned_regions else 'All enabled regions'}{' (+ ' + str(len(result.scanned_regions) - 10) + ' more)' if len(result.scanned_regions) > 10 else ''}</p>
+        </div>
+
         <h2>Executive Summary</h2>
         <div class="summary">
 {summary_cards}
@@ -418,5 +424,60 @@ class HTMLFormatter:
                 flags = ", ".join(f for f in (cluster.risk_flags or []) if "wlm" in f)
                 html += f"<li><strong>{cluster.name}</strong>: {queues} queues, Auto WLM: {auto_wlm} ({flags})</li>"
             html += "</ul></div>"
+
+        # Add cluster performance section
+        clusters_with_metrics = [
+            a
+            for a in clusters
+            if (a.usage_metrics or {}).get("cpu_utilization_max_24h") is not None
+        ]
+        if clusters_with_metrics:
+            html += """
+        <div class="insight-box info">
+            <h3>📊 Cluster Performance (Last 24h)</h3>
+            <table class="compact">
+                <tr><th>Cluster</th><th>CPU Max</th><th>CPU Avg</th><th>Queries</th><th>Disk Used</th><th>Recommendation</th></tr>
+            """
+            for cluster in clusters_with_metrics[:10]:
+                metrics = cluster.usage_metrics or {}
+                cpu_max = metrics.get("cpu_utilization_max_24h", 0)
+                cpu_avg = metrics.get("cpu_utilization_avg_24h", 0)
+                queries = metrics.get("queries_completed_24h", 0)
+                disk = metrics.get("disk_space_used_percent", 0)
+                rec = metrics.get("performance_recommendation", "-")
+                html += (
+                    f"<tr><td>{cluster.name}</td><td>{cpu_max:.1f}%</td>"
+                    f"<td>{cpu_avg:.1f}%</td><td>{queries}</td>"
+                    f"<td>{disk:.1f}%</td><td>{rec if rec else '-'}</td></tr>"
+                )
+            html += "</table></div>"
+
+        # Add serverless workgroup performance section
+        serverless_wgs = [a for a in assets if a.asset_type == "redshift_serverless_workgroup"]
+        serverless_with_metrics = [
+            a for a in serverless_wgs if (a.usage_metrics or {}).get("rpu_max_7d") is not None
+        ]
+        if serverless_with_metrics:
+            html += """
+        <div class="insight-box info">
+            <h3>🚀 Serverless Workgroup Utilization</h3>
+            <table class="compact">
+                <tr><th>Workgroup</th><th>Base RPU</th><th>Max RPU (7d)</th><th>Avg RPU (7d)</th><th>Queries (24h)</th><th>Recommendation</th></tr>
+            """
+            for wg in serverless_with_metrics[:10]:
+                metrics = wg.usage_metrics or {}
+                base = metrics.get("base_capacity", 0)
+                rpu_max = metrics.get("rpu_max_7d", 0)
+                rpu_avg = metrics.get("rpu_avg_7d", 0)
+                queries = metrics.get("queries_completed_24h", 0) + metrics.get(
+                    "queries_failed_24h", 0
+                )
+                rec = metrics.get("utilization_recommendation", "-")
+                html += (
+                    f"<tr><td>{wg.name}</td><td>{base}</td>"
+                    f"<td>{rpu_max:.1f}</td><td>{rpu_avg:.1f}</td>"
+                    f"<td>{queries}</td><td>{rec if rec else '-'}</td></tr>"
+                )
+            html += "</table></div>"
 
         return html

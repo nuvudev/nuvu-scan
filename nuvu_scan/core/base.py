@@ -88,10 +88,17 @@ class ScanResult:
     assets: list[Asset]
     total_cost_estimate_usd: float
     summary: dict[str, Any] = None
+    # Scan scope metadata
+    scanned_regions: list[str] = None
+    scanned_collectors: list[str] = None
 
     def __post_init__(self):
         if self.summary is None:
             self.summary = {}
+        if self.scanned_regions is None:
+            self.scanned_regions = []
+        if self.scanned_collectors is None:
+            self.scanned_collectors = []
 
 
 class CloudProviderScan(ABC):
@@ -173,6 +180,12 @@ class CloudProviderScan(ABC):
         # Build summary
         summary = self._build_summary(assets)
 
+        # Get scanned regions from assets
+        scanned_regions = sorted(set(asset.region for asset in assets if asset.region))
+
+        # Get scanned collectors from config
+        scanned_collectors = self.config.collectors if self.config.collectors else []
+
         return ScanResult(
             provider=self.provider,
             account_id=self.config.account_id or "unknown",
@@ -180,6 +193,8 @@ class CloudProviderScan(ABC):
             assets=assets,
             total_cost_estimate_usd=total_cost,
             summary=summary,
+            scanned_regions=scanned_regions,
+            scanned_collectors=scanned_collectors,
         )
 
     def _build_summary(self, assets: list[Asset]) -> dict[str, Any]:

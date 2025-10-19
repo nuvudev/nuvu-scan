@@ -14,18 +14,39 @@ from nuvu_scan.core.base import Asset, NormalizedCategory
 
 
 class RedshiftCollector:
-    """Collects Amazon Redshift resources."""
+    """Collects Amazon Redshift resources across all regions."""
 
     def __init__(self, session: boto3.Session, regions: list[str] | None = None):
         self.session = session
         self.regions = regions or []
         self._account_id: str | None = None
+        self._all_regions_cache: list[str] | None = None
+
+    def _get_all_regions(self) -> list[str]:
+        """Get all enabled AWS regions."""
+        if self._all_regions_cache:
+            return self._all_regions_cache
+        try:
+            ec2 = self.session.client("ec2", region_name="us-east-1")
+            response = ec2.describe_regions(AllRegions=False)
+            self._all_regions_cache = [r["RegionName"] for r in response.get("Regions", [])]
+            return self._all_regions_cache
+        except ClientError:
+            # Fallback to common regions
+            return ["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"]
+
+    def _get_regions_to_check(self) -> list[str]:
+        """Get regions to scan - all enabled if none specified."""
+        return self.regions if self.regions else self._get_all_regions()
 
     def collect(self) -> list[Asset]:
-        """Collect all Redshift resources."""
+        """Collect all Redshift resources across all regions."""
         import sys
 
         assets = []
+
+        regions = self._get_regions_to_check()
+        print(f"  → Scanning {len(regions)} regions for Redshift resources...", file=sys.stderr)
 
         # Collect reserved nodes first to compare with clusters
         print("  → Checking reserved nodes...", file=sys.stderr)
@@ -66,7 +87,7 @@ class RedshiftCollector:
         """Get reserved nodes per region for comparison with on-demand clusters."""
         reserved_by_region = {}
 
-        regions_to_check = self.regions if self.regions else ["us-east-1"]
+        regions_to_check = self._get_regions_to_check()
 
         for region in regions_to_check:
             try:
@@ -111,7 +132,7 @@ class RedshiftCollector:
         """Collect provisioned Redshift clusters with enhanced metrics."""
         assets = []
 
-        regions_to_check = self.regions if self.regions else ["us-east-1"]
+        regions_to_check = self._get_regions_to_check()
 
         for region in regions_to_check:
             try:
@@ -152,6 +173,9 @@ class RedshiftCollector:
                     # Get WLM configuration
                     wlm_config = self._get_wlm_configuration(redshift_client, cluster_id)
 
+                    # Get performance metrics from CloudWatch
+                    perf_metrics = self._get_cluster_performance_metrics(cluster_id, region)
+
                     # Calculate cluster age for reservation recommendation
                     create_time = cluster.get("ClusterCreateTime")
                     cluster_age_days = None
@@ -184,6 +208,13 @@ class RedshiftCollector:
                         risk_flags.append("default_wlm_only")
                     if wlm_config.get("has_unlimited_queue"):
                         risk_flags.append("unlimited_wlm_queue")
+
+                    # Performance-based risks
+                    if (
+                        perf_metrics.get("cpu_utilization_max_24h") is not None
+                        and perf_metrics["cpu_utilization_max_24h"] < 20
+                    ):
+                        risk_flags.append("low_cpu_utilization")
 
                     # Get maintenance window info
                     maintenance_window = cluster.get("PreferredMaintenanceWindow", "")
@@ -252,6 +283,24 @@ class RedshiftCollector:
                                     "has_unlimited_queue", False
                                 ),
                                 "wlm_auto_wlm": wlm_config.get("auto_wlm", False),
+                                # Performance metrics
+                                "cpu_utilization_max_24h": perf_metrics.get(
+                                    "cpu_utilization_max_24h"
+                                ),
+                                "cpu_utilization_avg_24h": perf_metrics.get(
+                                    "cpu_utilization_avg_24h"
+                                ),
+                                "queries_completed_24h": perf_metrics.get("queries_completed_24h"),
+                                "disk_space_used_percent": perf_metrics.get(
+                                    "disk_space_used_percent"
+                                ),
+                                "avg_query_duration_ms": perf_metrics.get("avg_query_duration_ms"),
+                                "max_query_queue_time_ms": perf_metrics.get(
+                                    "max_query_queue_time_ms"
+                                ),
+                                "performance_recommendation": perf_metrics.get(
+                                    "performance_recommendation"
+                                ),
                             },
                             cost_estimate_usd=monthly_cost,
                         )
@@ -279,7 +328,7 @@ class RedshiftCollector:
         """Collect Redshift Serverless namespaces and workgroups."""
         assets = []
 
-        regions_to_check = self.regions if self.regions else ["us-east-1"]
+        regions_to_check = self._get_regions_to_check()
 
         for region in regions_to_check:
             try:
@@ -346,9 +395,17 @@ class RedshiftCollector:
                         wg_name = wg.get("workgroupName", "")
                         base_capacity = wg.get("baseCapacity", 0)
 
-                        # Estimate cost: Serverless charges $0.36/RPU-hour
-                        # Assume 10% utilization for base estimate
-                        estimated_monthly_cost = base_capacity * 0.36 * 24 * 30 * 0.1
+                        # Get CloudWatch metrics for this workgroup
+                        wg_metrics = self._get_serverless_metrics(wg_name, region)
+
+                        # Calculate cost based on actual usage if available
+                        if wg_metrics.get("rpu_avg_7d"):
+                            # Use actual average RPU for cost estimate
+                            avg_rpu = wg_metrics["rpu_avg_7d"]
+                            estimated_monthly_cost = avg_rpu * 0.36 * 24 * 30
+                        else:
+                            # Fallback: assume 10% utilization of base capacity
+                            estimated_monthly_cost = base_capacity * 0.36 * 24 * 30 * 0.1
 
                         # Check public accessibility
                         publicly_accessible = wg.get("publiclyAccessible", False)
@@ -356,6 +413,23 @@ class RedshiftCollector:
                         wg_risk_flags = []
                         if publicly_accessible:
                             wg_risk_flags.append("publicly_accessible")
+
+                        # Add risk flag for low utilization (cost optimization)
+                        if (
+                            wg_metrics.get("rpu_max_7d")
+                            and base_capacity > 0
+                            and wg_metrics["rpu_max_7d"] < base_capacity * 0.5
+                        ):
+                            wg_risk_flags.append("low_rpu_utilization")
+
+                        # Add risk flag for high failure rate
+                        total_queries = wg_metrics.get("queries_completed_24h", 0) + wg_metrics.get(
+                            "queries_failed_24h", 0
+                        )
+                        if total_queries > 0:
+                            failure_rate = wg_metrics.get("queries_failed_24h", 0) / total_queries
+                            if failure_rate > 0.1:  # >10% failure rate
+                                wg_risk_flags.append("high_query_failure_rate")
 
                         assets.append(
                             Asset(
@@ -382,6 +456,23 @@ class RedshiftCollector:
                                     "status": wg.get("status", "unknown"),
                                     "publicly_accessible": publicly_accessible,
                                     "enhanced_vpc_routing": wg.get("enhancedVpcRouting", False),
+                                    # RPU utilization metrics
+                                    "rpu_max_24h": wg_metrics.get("rpu_max_24h"),
+                                    "rpu_avg_24h": wg_metrics.get("rpu_avg_24h"),
+                                    "rpu_max_7d": wg_metrics.get("rpu_max_7d"),
+                                    "rpu_avg_7d": wg_metrics.get("rpu_avg_7d"),
+                                    # Query metrics
+                                    "queries_completed_24h": wg_metrics.get(
+                                        "queries_completed_24h"
+                                    ),
+                                    "queries_failed_24h": wg_metrics.get("queries_failed_24h"),
+                                    "avg_query_duration_ms": wg_metrics.get(
+                                        "avg_query_duration_ms"
+                                    ),
+                                    # Recommendation
+                                    "utilization_recommendation": wg_metrics.get(
+                                        "utilization_recommendation"
+                                    ),
                                 },
                             )
                         )
@@ -408,7 +499,7 @@ class RedshiftCollector:
         """Collect Redshift Datashares (cross-account data sharing)."""
         assets = []
 
-        regions_to_check = self.regions if self.regions else ["us-east-1"]
+        regions_to_check = self._get_regions_to_check()
 
         for region in regions_to_check:
             try:
@@ -635,6 +726,229 @@ class RedshiftCollector:
         except Exception:
             return None
 
+    def _get_cluster_performance_metrics(self, cluster_id: str, region: str) -> dict:
+        """Get performance metrics for provisioned Redshift cluster."""
+        metrics = {
+            "cpu_utilization_max_24h": None,
+            "cpu_utilization_avg_24h": None,
+            "queries_completed_24h": 0,
+            "disk_space_used_percent": None,
+            "avg_query_duration_ms": None,
+            "max_query_queue_time_ms": None,
+            "performance_recommendation": None,
+        }
+
+        try:
+            cloudwatch = self.session.client("cloudwatch", region_name=region)
+            now = datetime.now(timezone.utc)
+
+            # Get CPU utilization
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift",
+                MetricName="CPUUtilization",
+                Dimensions=[{"Name": "ClusterIdentifier", "Value": cluster_id}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=300,
+                Statistics=["Maximum", "Average"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["cpu_utilization_max_24h"] = max(dp.get("Maximum", 0) for dp in datapoints)
+                metrics["cpu_utilization_avg_24h"] = sum(
+                    dp.get("Average", 0) for dp in datapoints
+                ) / len(datapoints)
+
+            # Get disk space usage
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift",
+                MetricName="PercentageDiskSpaceUsed",
+                Dimensions=[{"Name": "ClusterIdentifier", "Value": cluster_id}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=3600,
+                Statistics=["Maximum"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["disk_space_used_percent"] = max(dp.get("Maximum", 0) for dp in datapoints)
+
+            # Get query throughput
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift",
+                MetricName="QueriesCompletedPerSecond",
+                Dimensions=[{"Name": "ClusterIdentifier", "Value": cluster_id}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=3600,
+                Statistics=["Sum"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["queries_completed_24h"] = int(
+                    sum(dp.get("Sum", 0) * 3600 for dp in datapoints)
+                )
+
+            # Get query execution time
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift",
+                MetricName="QueryDuration",
+                Dimensions=[{"Name": "ClusterIdentifier", "Value": cluster_id}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=300,
+                Statistics=["Average", "Maximum"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["avg_query_duration_ms"] = sum(
+                    dp.get("Average", 0) for dp in datapoints
+                ) / len(datapoints)
+                metrics["max_query_queue_time_ms"] = max(dp.get("Maximum", 0) for dp in datapoints)
+
+            # Generate performance recommendation
+            if metrics["cpu_utilization_max_24h"] is not None:
+                max_cpu = metrics["cpu_utilization_max_24h"]
+                if max_cpu < 30:
+                    metrics["performance_recommendation"] = (
+                        f"Low CPU utilization (max {max_cpu:.0f}%). "
+                        f"Consider downsizing node type or reducing node count."
+                    )
+                elif max_cpu > 90:
+                    metrics["performance_recommendation"] = (
+                        f"High CPU utilization (max {max_cpu:.0f}%). "
+                        f"Consider upgrading node type or adding nodes."
+                    )
+
+        except ClientError:
+            pass
+        except Exception:
+            pass
+
+        return metrics
+
+    def _get_serverless_metrics(self, workgroup_name: str, region: str) -> dict:
+        """Get CloudWatch metrics for Redshift Serverless workgroup."""
+        metrics = {
+            "rpu_max_24h": None,
+            "rpu_avg_24h": None,
+            "rpu_max_7d": None,
+            "rpu_avg_7d": None,
+            "queries_completed_24h": 0,
+            "queries_failed_24h": 0,
+            "avg_query_duration_ms": None,
+            "max_query_queue_time_ms": None,
+            "cpu_utilization_max_24h": None,
+            "cpu_utilization_avg_24h": None,
+            "utilization_recommendation": None,
+        }
+
+        try:
+            cloudwatch = self.session.client("cloudwatch", region_name=region)
+            now = datetime.now(timezone.utc)
+
+            # Get 24-hour RPU metrics
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift-Serverless",
+                MetricName="ComputeCapacity",
+                Dimensions=[{"Name": "Workgroup", "Value": workgroup_name}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=300,  # 5-minute granularity
+                Statistics=["Maximum", "Average"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["rpu_max_24h"] = max(dp.get("Maximum", 0) for dp in datapoints)
+                metrics["rpu_avg_24h"] = sum(dp.get("Average", 0) for dp in datapoints) / len(
+                    datapoints
+                )
+
+            # Get 7-day RPU for trend analysis
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift-Serverless",
+                MetricName="ComputeCapacity",
+                Dimensions=[{"Name": "Workgroup", "Value": workgroup_name}],
+                StartTime=now - timedelta(days=7),
+                EndTime=now,
+                Period=3600,  # 1-hour granularity for longer period
+                Statistics=["Maximum", "Average"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["rpu_max_7d"] = max(dp.get("Maximum", 0) for dp in datapoints)
+                metrics["rpu_avg_7d"] = sum(dp.get("Average", 0) for dp in datapoints) / len(
+                    datapoints
+                )
+
+            # Get query completion count
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift-Serverless",
+                MetricName="QueriesCompletedPerSecond",
+                Dimensions=[{"Name": "Workgroup", "Value": workgroup_name}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=3600,
+                Statistics=["Sum"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                # Sum of queries per second * 3600 seconds = total queries in that hour
+                metrics["queries_completed_24h"] = int(
+                    sum(dp.get("Sum", 0) * 3600 for dp in datapoints)
+                )
+
+            # Get failed queries
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift-Serverless",
+                MetricName="QueriesFailedPerSecond",
+                Dimensions=[{"Name": "Workgroup", "Value": workgroup_name}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=3600,
+                Statistics=["Sum"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["queries_failed_24h"] = int(
+                    sum(dp.get("Sum", 0) * 3600 for dp in datapoints)
+                )
+
+            # Get query duration
+            response = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Redshift-Serverless",
+                MetricName="QueryDuration",
+                Dimensions=[{"Name": "Workgroup", "Value": workgroup_name}],
+                StartTime=now - timedelta(hours=24),
+                EndTime=now,
+                Period=300,
+                Statistics=["Average", "Maximum"],
+            )
+            datapoints = response.get("Datapoints", [])
+            if datapoints:
+                metrics["avg_query_duration_ms"] = sum(
+                    dp.get("Average", 0) for dp in datapoints
+                ) / len(datapoints)
+
+            # Generate recommendation based on utilization
+            if metrics["rpu_max_7d"] is not None:
+                max_rpu = metrics["rpu_max_7d"]
+                if max_rpu > 0:
+                    # If max RPU never exceeds 50% of base capacity, recommend reducing
+                    if metrics.get("rpu_avg_7d", 0) < max_rpu * 0.3:
+                        metrics["utilization_recommendation"] = (
+                            f"Low utilization: Max RPU {max_rpu:.0f}, "
+                            f"Avg RPU {metrics.get('rpu_avg_7d', 0):.0f}. "
+                            f"Consider reducing base capacity."
+                        )
+
+        except ClientError:
+            pass  # Silently handle permission issues
+        except Exception:
+            pass
+
+        return metrics
+
     def get_cost_estimate(self, asset: Asset) -> float:
         """Get cost estimate for Redshift asset."""
         return asset.cost_estimate_usd or 0.0
@@ -741,7 +1055,7 @@ class RedshiftCollector:
         """Collect Redshift snapshots with cost and retention analysis."""
         assets = []
 
-        regions_to_check = self.regions if self.regions else ["us-east-1"]
+        regions_to_check = self._get_regions_to_check()
 
         for region in regions_to_check:
             try:
@@ -853,7 +1167,7 @@ class RedshiftCollector:
         """Create assets for reserved nodes for visibility and tracking."""
         assets = []
 
-        regions_to_check = self.regions if self.regions else ["us-east-1"]
+        regions_to_check = self._get_regions_to_check()
 
         for region in regions_to_check:
             try:
