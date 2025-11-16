@@ -236,6 +236,7 @@ class AWSScanner(CloudProviderScan):
                 continue
 
         # Add a summary asset with actual costs from Cost Explorer
+        # Only include costs for services related to the scanned collectors
         try:
             from datetime import datetime, timedelta
 
@@ -244,9 +245,44 @@ class AWSScanner(CloudProviderScan):
             service_costs = self.cost_explorer.get_service_costs(start_date, end_date)
 
             if service_costs:
-                total_actual_cost = sum(service_costs.values())
+                # Map collectors to AWS service names in Cost Explorer
+                collector_to_services = {
+                    "s3": ["Amazon Simple Storage Service"],
+                    "glue": ["AWS Glue"],
+                    "athena": ["Amazon Athena"],
+                    "redshift": ["Amazon Redshift"],
+                    "iam": [],  # IAM is free
+                    "mwaa": ["Amazon Managed Workflows for Apache Airflow"],
+                }
+
+                # Filter costs based on active collectors
+                active_collector_names = (
+                    [name.lower() for name in self.config.collectors]
+                    if self.config.collectors
+                    else list(collector_to_services.keys())
+                )
+
+                # Build list of relevant AWS service names
+                relevant_services = set()
+                for collector_name in active_collector_names:
+                    services = collector_to_services.get(collector_name, [])
+                    relevant_services.update(services)
+
+                # Filter service_costs to only include relevant services
+                if self.config.collectors:  # Only filter if specific collectors requested
+                    filtered_costs = {
+                        svc: cost for svc, cost in service_costs.items() if svc in relevant_services
+                    }
+                    total_actual_cost = sum(filtered_costs.values())
+                    display_costs = filtered_costs
+                    scope_note = f"Filtered to collectors: {', '.join(self.config.collectors)}"
+                else:
+                    # Full scan - show all costs
+                    total_actual_cost = sum(service_costs.values())
+                    display_costs = service_costs
+                    scope_note = "Full scan - all services"
+
                 # Use the actual 30-day cost as monthly estimate
-                # This represents the actual spend, not an extrapolation
                 monthly_estimate = total_actual_cost
 
                 # Create a summary asset
@@ -257,7 +293,7 @@ class AWSScanner(CloudProviderScan):
                     service="Cost Explorer",
                     region="global",
                     arn="arn:aws:ce::cost-summary",
-                    name="AWS Cost Summary (Last 30 Days)",
+                    name=f"AWS Cost Summary - {scope_note}",
                     created_at=None,
                     last_activity_at=datetime.utcnow().isoformat(),
                     tags={},
@@ -266,10 +302,11 @@ class AWSScanner(CloudProviderScan):
                     ownership_confidence="unknown",
                     suggested_owner=None,
                     usage_metrics={
-                        "actual_costs_30d": service_costs,
+                        "actual_costs_30d": display_costs,
                         "total_actual_cost_30d": total_actual_cost,
                         "estimated_monthly_cost": monthly_estimate,
-                        "note": "Actual costs from AWS Cost Explorer API for the last 30 days. This represents real spend, not estimates. Note: Some costs shown are for services that are not data assets (e.g., domain registration, email services, DNS). Individual asset costs below may be estimates based on resource usage.",
+                        "scope": scope_note,
+                        "note": "Actual costs from AWS Cost Explorer API for the last 30 days.",
                     },
                 )
                 all_assets.append(cost_summary_asset)

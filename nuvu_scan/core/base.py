@@ -234,6 +234,21 @@ class CloudProviderScan(ABC):
             if asset.risk_flags:
                 risky_count += 1
 
+        # Find cost summary asset if present
+        actual_costs_30d = {}
+        total_actual_cost_30d = None
+        for asset in assets:
+            if asset.asset_type == "cost_summary":
+                usage = asset.usage_metrics or {}
+                actual_costs_30d = usage.get("actual_costs_30d", {})
+                total_actual_cost_30d = usage.get("total_actual_cost_30d")
+                break
+
+        # Calculate estimated asset costs (excluding cost_summary)
+        estimated_assets_total = sum(
+            asset.cost_estimate_usd or 0 for asset in assets if asset.asset_type != "cost_summary"
+        )
+
         return {
             "total_assets": total_assets,
             "assets_by_category": assets_by_category,
@@ -241,4 +256,8 @@ class CloudProviderScan(ABC):
             "unused_count": unused_count,
             "no_owner_count": no_owner_count,
             "risky_count": risky_count,
+            # Cost data
+            "actual_costs_30d": actual_costs_30d,
+            "total_actual_cost_30d": total_actual_cost_30d,
+            "estimated_assets_cost_total": estimated_assets_total,
         }
