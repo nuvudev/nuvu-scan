@@ -237,12 +237,14 @@ class AWSScanner(CloudProviderScan):
 
         # Add a summary asset with actual costs from Cost Explorer
         # Only include costs for services related to the scanned collectors
+        print("Fetching cost data from AWS Cost Explorer...", file=sys.stderr)
         try:
             from datetime import datetime, timedelta
 
             end_date = datetime.utcnow()
             start_date = end_date - timedelta(days=30)
             service_costs = self.cost_explorer.get_service_costs(start_date, end_date)
+            print("  → Cost data retrieved", file=sys.stderr)
 
             if service_costs:
                 # Map collectors to AWS service names in Cost Explorer
@@ -337,39 +339,16 @@ class AWSScanner(CloudProviderScan):
     def get_cost_estimate(self, asset: Asset) -> float:
         """Estimate monthly cost for an AWS asset.
 
-        First tries to get actual cost from Cost Explorer API.
-        Falls back to collector-based estimates if Cost Explorer data is not available.
+        Uses collector-based estimates for individual assets.
+        Service-level actual costs from Cost Explorer are already included
+        in the cost_summary asset and used for reporting.
         """
-        # First, try to get actual cost from Cost Explorer API
-        try:
-            # Map service names to Cost Explorer service names
-            service_mapping = {
-                "S3": "Amazon Simple Storage Service",
-                "Athena": "Amazon Athena",
-                "Glue": "AWS Glue",
-                "Redshift": "Amazon Redshift",
-                "MWAA": "Amazon Managed Workflows for Apache Airflow",
-            }
+        # Use the cost already set by the collector during collection
+        # This avoids making Cost Explorer API calls for each asset
+        if asset.cost_estimate_usd is not None and asset.cost_estimate_usd > 0:
+            return asset.cost_estimate_usd
 
-            cost_explorer_service = service_mapping.get(asset.service)
-            if cost_explorer_service:
-                # Get service-level cost from Cost Explorer (last 30 days actual cost)
-                service_cost = self.cost_explorer.get_monthly_cost_for_service(
-                    cost_explorer_service
-                )
-                if service_cost > 0:
-                    # We have actual service-level cost from Cost Explorer
-                    # For now, we'll still use collector estimates for individual assets
-                    # because Cost Explorer doesn't provide per-resource costs without tags
-                    # But we could potentially distribute service cost across assets proportionally
-                    # For now, prefer collector estimates which are more accurate per-resource
-                    pass  # Continue to collector-based estimation
-
-        except Exception:
-            # If Cost Explorer fails, fall back to collector-based estimation
-            pass
-
-        # Delegate to appropriate collector based on service for detailed estimation
+        # Delegate to appropriate collector based on service for estimation
         for collector in self.collectors:
             if hasattr(collector, "get_cost_estimate"):
                 try:
