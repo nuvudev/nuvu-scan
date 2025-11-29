@@ -349,6 +349,7 @@ def scan_command(
                         "size_bytes": asset.size_bytes,
                         "tags": asset.tags,
                         "cost_estimate_usd": asset.cost_estimate_usd,
+                        "usage_metrics": asset.usage_metrics,  # Include all usage metrics
                         "risk_flags": asset.risk_flags,
                         "ownership_confidence": asset.ownership_confidence or "unknown",
                         "suggested_owner": asset.suggested_owner,

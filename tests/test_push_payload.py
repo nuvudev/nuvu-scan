@@ -40,6 +40,13 @@ class TestPushPayloadFormat:
                 cost_estimate_usd=500.0,
                 risk_flags=[],
                 tags={},
+                usage_metrics={
+                    "node_count": 4,
+                    "node_type": "dc2.large",
+                    "has_reservation": True,
+                    "reserved_nodes_count": 4,
+                    "on_demand_nodes_count": 0,
+                },
             ),
         ]
         return ScanResult(
@@ -81,6 +88,7 @@ class TestPushPayloadFormat:
                     "size_bytes": asset.size_bytes,
                     "tags": asset.tags,
                     "cost_estimate_usd": asset.cost_estimate_usd,
+                    "usage_metrics": asset.usage_metrics,  # Include all usage metrics
                     "risk_flags": asset.risk_flags,
                     "ownership_confidence": asset.ownership_confidence or "unknown",
                     "suggested_owner": asset.suggested_owner,
@@ -154,6 +162,37 @@ class TestPushPayloadFormat:
                 "billing",
                 "unknown",
             ]
+
+    def test_usage_metrics_included_in_payload(self, sample_scan_result):
+        """Test that usage_metrics is included in push payload for governance calculations."""
+        result = sample_scan_result
+
+        # Build payload matching scan.py implementation
+        payload = {
+            "assets": [
+                {
+                    "provider": asset.provider,
+                    "asset_type": asset.asset_type,
+                    "usage_metrics": asset.usage_metrics,
+                }
+                for asset in result.assets
+            ],
+        }
+
+        # Find the Redshift cluster asset
+        redshift_assets = [a for a in payload["assets"] if a["asset_type"] == "redshift_cluster"]
+        assert len(redshift_assets) == 1
+
+        redshift_asset = redshift_assets[0]
+        assert redshift_asset["usage_metrics"] is not None
+
+        # Verify key Redshift metrics are present
+        usage_metrics = redshift_asset["usage_metrics"]
+        assert "node_count" in usage_metrics
+        assert "has_reservation" in usage_metrics
+        assert "reserved_nodes_count" in usage_metrics
+        assert usage_metrics["node_count"] == 4
+        assert usage_metrics["has_reservation"] is True
 
 
 class TestScanResultFields:
