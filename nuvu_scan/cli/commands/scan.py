@@ -359,7 +359,8 @@ def scan_command(
             }
 
             # Push to API using the /api/scans/import endpoint
-            with httpx.Client(timeout=60) as client:
+            # Use longer timeout for large scans (2000+ assets can take minutes)
+            with httpx.Client(timeout=300) as client:
                 response = client.post(
                     f"{api_url.rstrip('/')}/api/scans/import",
                     json=payload,
