@@ -163,7 +163,27 @@ class HTMLFormatter:
             html += f"            <tr><td>{category.replace('_', ' ').title()}</td><td>{count}</td></tr>\n"
 
         # All Assets - COLLAPSIBLE
-        asset_count = len(result.assets)
+        # Filter out:
+        # - Expired/retired reserved nodes (historical clutter)
+        # - Cost summary (it's a summary row, not an asset)
+        # They're still counted in the governance summary for context
+        display_assets = [
+            a
+            for a in result.assets
+            if not (
+                # Exclude expired/retired reserved nodes
+                (
+                    a.asset_type == "redshift_reserved_node"
+                    and any(
+                        flag in (a.risk_flags or [])
+                        for flag in ["reservation_expired", "reservation_retired"]
+                    )
+                )
+                # Exclude cost summary pseudo-asset
+                or a.asset_type == "cost_summary"
+            )
+        ]
+        asset_count = len(display_assets)
         html += f"""        </table>
 
         <button class="collapsible">All Assets <span class="asset-count">({asset_count} items)</span></button>
@@ -181,7 +201,7 @@ class HTMLFormatter:
 """
 
         # Sort assets by cost (descending)
-        sorted_assets = sorted(result.assets, key=lambda x: x.cost_estimate_usd or 0, reverse=True)
+        sorted_assets = sorted(display_assets, key=lambda x: x.cost_estimate_usd or 0, reverse=True)
 
         for asset in sorted_assets:
             owner_class = ""
