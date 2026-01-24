@@ -122,6 +122,7 @@ class AWSScanner(CloudProviderScan):
         except Exception as e:
             # If Cost Explorer fails, continue without summary
             import sys
+
             print(
                 f"INFO: Could not get Cost Explorer summary: {e}",
                 file=sys.stderr,

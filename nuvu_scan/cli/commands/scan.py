@@ -158,9 +158,7 @@ def scan_command(
 
         # Provide helpful message if no assets found
         if len(result.assets) == 0:
-            click.echo(
-                "\nNo assets found. This could mean:", err=True
-            )
+            click.echo("\nNo assets found. This could mean:", err=True)
             if provider == "gcp":
                 click.echo(
                     "  - The project has no GCS buckets, BigQuery datasets, Dataproc clusters, or Pub/Sub topics",

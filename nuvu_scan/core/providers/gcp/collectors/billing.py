@@ -23,7 +23,9 @@ class BillingCollector:
         self.cloudbilling_v1beta_client = None
 
         try:
-            self.cloudbilling_client = discovery.build("cloudbilling", "v1", credentials=credentials)
+            self.cloudbilling_client = discovery.build(
+                "cloudbilling", "v1", credentials=credentials
+            )
             # Try v1beta for more detailed cost data
             try:
                 self.cloudbilling_v1beta_client = discovery.build(

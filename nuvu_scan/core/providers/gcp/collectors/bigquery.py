@@ -358,7 +358,11 @@ class BigQueryCollector:
         """Get cost estimate for BigQuery asset."""
         # For query jobs asset, cost is already calculated and stored in usage_metrics
         if asset.asset_type == "bigquery_queries":
-            return asset.usage_metrics.get("estimated_monthly_cost", 0.0) if asset.usage_metrics else 0.0
+            return (
+                asset.usage_metrics.get("estimated_monthly_cost", 0.0)
+                if asset.usage_metrics
+                else 0.0
+            )
 
         # For datasets, use the cost_estimate_usd that was set during collection
         return asset.cost_estimate_usd or 0.0

@@ -117,7 +117,9 @@ class IAMCollector:
                             "last_used": last_activity,
                             "idle_days": idle_days,
                             "days_since_last_use": idle_days,
-                            "attached_policies_count": len(attached_policies.get("AttachedPolicies", [])),
+                            "attached_policies_count": len(
+                                attached_policies.get("AttachedPolicies", [])
+                            ),
                             "inline_policies_count": len(inline_policies.get("PolicyNames", [])),
                             "last_used_region": last_used.get("Region"),
                         },
@@ -205,9 +207,7 @@ class IAMCollector:
 
         return False
 
-    def _has_overly_permissive_policies(
-        self, role_name: str, attached_policies: dict
-    ) -> bool:
+    def _has_overly_permissive_policies(self, role_name: str, attached_policies: dict) -> bool:
         """Check if role has overly permissive policies (e.g., *:*)."""
         overly_permissive_patterns = ["*", "s3:*", "glue:*", "athena:*"]
 
