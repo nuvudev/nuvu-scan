@@ -155,7 +155,7 @@ def scan_command(
     try:
         result = scanner.scan()
         click.echo(f"Found {len(result.assets)} assets", err=True)
-        
+
         # Provide helpful message if no assets found
         if len(result.assets) == 0:
             click.echo(
