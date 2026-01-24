@@ -79,10 +79,15 @@ class RedshiftCollector:
                                 else None
                             ),
                             risk_flags=risk_flags,
+                            last_activity_at=self._get_last_activity(cluster_id, region),
                             usage_metrics={
                                 "status": status,
                                 "node_count": node_count,
                                 "node_type": node_type,
+                                "last_used": self._get_last_activity(cluster_id, region),
+                                "days_since_last_use": self._calculate_days_since_last_use(
+                                    self._get_last_activity(cluster_id, region)
+                                ),
                             },
                             cost_estimate_usd=monthly_cost,
                         )
@@ -136,9 +141,12 @@ class RedshiftCollector:
                                 if namespace.get("creationDate")
                                 else None
                             ),
+                            last_activity_at=None,  # Serverless doesn't have direct last activity
                             usage_metrics={
                                 "workgroup_count": workgroup_count,
                                 "status": namespace.get("status", "unknown"),
+                                "last_used": None,
+                                "days_since_last_use": None,
                             },
                         )
                     )
@@ -169,6 +177,55 @@ class RedshiftCollector:
     def get_usage_metrics(self, asset: Asset) -> dict[str, Any]:
         """Get usage metrics for Redshift asset."""
         return asset.usage_metrics or {}
+
+    def _get_last_activity(self, cluster_id: str, region: str) -> str | None:
+        """Get last activity timestamp for a Redshift cluster."""
+        from datetime import datetime, timedelta
+
+        try:
+            # Try CloudTrail to find last API call to this cluster
+            cloudtrail_client = self.session.client("cloudtrail", region_name="us-east-1")
+
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(days=90)
+
+            try:
+                response = cloudtrail_client.lookup_events(
+                    LookupAttributes=[
+                        {"AttributeKey": "ResourceName", "AttributeValue": cluster_id},
+                    ],
+                    StartTime=start_time,
+                    EndTime=end_time,
+                    MaxResults=1,
+                )
+
+                events = response.get("Events", [])
+                if events:
+                    latest_event = max(events, key=lambda x: x.get("EventTime", datetime.min))
+                    event_time = latest_event.get("EventTime")
+                    if event_time:
+                        return event_time.isoformat()
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+
+        return None
+
+    def _calculate_days_since_last_use(self, last_activity: str | None) -> int | None:
+        """Calculate days since last use."""
+        from datetime import datetime
+
+        if not last_activity:
+            return None
+
+        try:
+            last_used = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
+            days = (datetime.utcnow() - last_used.replace(tzinfo=None)).days
+            return days
+        except Exception:
+            return None
 
     def get_cost_estimate(self, asset: Asset) -> float:
         """Get cost estimate for Redshift asset."""

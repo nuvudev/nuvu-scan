@@ -1,6 +1,6 @@
 [project]
 name = "nuvu-scan"
-version = "0.2.0"
+version = "1.2.0"
 description = "Multi-Cloud Data Asset Control - CLI tool for discovering and analyzing cloud data infrastructure"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,6 +24,13 @@ classifiers = [
 dependencies = [
     "boto3>=1.28.0",
     "click>=8.0.0",
+    "google-cloud-storage>=2.10.0",
+    "google-cloud-bigquery>=3.11.0",
+    "google-cloud-dataproc>=5.4.0",
+    "google-cloud-pubsub>=2.18.0",
+    "google-auth>=2.23.0",
+    "google-api-python-client>=2.100.0",
+    "google-cloud-billing>=1.11.0",
 ]
 
 [project.optional-dependencies]

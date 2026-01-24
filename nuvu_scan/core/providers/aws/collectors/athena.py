@@ -65,7 +65,11 @@ class AthenaCollector:
                             ),
                             last_activity_at=query_stats.get("last_query_time"),
                             risk_flags=risk_flags,
-                            usage_metrics=query_stats,
+                            usage_metrics={
+                                **query_stats,
+                                "last_used": query_stats.get("last_query_time"),
+                                "days_since_last_use": query_stats.get("idle_days"),
+                            },
                         )
                     )
                 except ClientError:

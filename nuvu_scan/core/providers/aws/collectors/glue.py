@@ -53,7 +53,12 @@ class GlueCollector:
                             tags=tags,
                             ownership_confidence=ownership["confidence"],
                             suggested_owner=ownership["owner"],
-                            usage_metrics={"table_count": 0},
+                            last_activity_at=None,
+                            usage_metrics={
+                                "table_count": 0,
+                                "last_used": None,
+                                "days_since_last_use": None,
+                            },
                         )
                     )
 
@@ -90,7 +95,12 @@ class GlueCollector:
                                         risk_flags=risk_flags,
                                         ownership_confidence=table_ownership["confidence"],
                                         suggested_owner=table_ownership["owner"],
-                                        usage_metrics={"partition_count": partition_count},
+                                        last_activity_at=None,  # Glue tables don't track last access
+                                        usage_metrics={
+                                            "partition_count": partition_count,
+                                            "last_used": None,
+                                            "days_since_last_use": None,
+                                        },
                                     )
                                 )
                     except ClientError:
