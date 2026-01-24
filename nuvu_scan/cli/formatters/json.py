@@ -3,7 +3,7 @@ JSON report formatter.
 """
 
 import json
-from typing import Dict, Any
+
 from ...core import ScanResult
 
 

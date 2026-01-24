@@ -1,12 +1,9 @@
 """Tests for core base classes."""
 
-import pytest
 from nuvu_scan.core.base import (
-    CloudProviderScan,
     Asset,
-    ScanConfig,
-    ScanResult,
     NormalizedCategory,
+    ScanConfig,
 )
 
 

@@ -4,7 +4,7 @@ CSV report formatter.
 
 import csv
 import io
-from typing import Dict, Any
+
 from ...core import ScanResult
 
 
