@@ -34,15 +34,15 @@ repos:
         args: ["-c", "pyproject.toml"]
         additional_dependencies: ["bandit[toml]"]
 
-  # Run tests before commit
+  # Run tests before commit (only when Python files change)
   - repo: local
     hooks:
       - id: pytest
         name: pytest
-        entry: uv run pytest tests/ -x -q
+        entry: uv run pytest tests/ -x -q --tb=no
         language: system
         pass_filenames: false
-        always_run: true
+        types: [python]
         stages: [pre-commit]
 
 # Configuration
