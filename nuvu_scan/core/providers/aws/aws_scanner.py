@@ -217,11 +217,16 @@ class AWSScanner(CloudProviderScan):
 
         for i, collector in enumerate(self.collectors, 1):
             collector_name = collector.__class__.__name__
-            print(f"[{i}/{len(self.collectors)}] Collecting from {collector_name}...", file=sys.stderr)
+            print(
+                f"[{i}/{len(self.collectors)}] Collecting from {collector_name}...", file=sys.stderr
+            )
             try:
                 assets = collector.collect()
                 all_assets.extend(assets)
-                print(f"[{i}/{len(self.collectors)}] {collector_name}: Found {len(assets)} assets", file=sys.stderr)
+                print(
+                    f"[{i}/{len(self.collectors)}] {collector_name}: Found {len(assets)} assets",
+                    file=sys.stderr,
+                )
             except Exception as e:
                 # Log error but continue with other collectors
                 print(f"Error collecting from {collector_name}: {e}", file=sys.stderr)
