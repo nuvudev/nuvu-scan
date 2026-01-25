@@ -108,7 +108,7 @@ def scan_command(
     if provider == "aws":
         # Build credentials dict
         credentials = {}
-        
+
         # Get credentials from CLI args or environment
         if access_key_id and secret_access_key:
             credentials["access_key_id"] = access_key_id
@@ -131,13 +131,13 @@ def scan_command(
                 credentials["secret_access_key"] = secret_access_key
                 if session_token:
                     credentials["session_token"] = session_token
-        
+
         # Set region
         if region:
             credentials["region"] = region[0]
         elif "region" not in credentials:
             credentials["region"] = "us-east-1"
-        
+
         # Add role assumption parameters if provided
         if role_arn:
             credentials["role_arn"] = role_arn
