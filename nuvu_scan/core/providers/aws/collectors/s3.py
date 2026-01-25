@@ -30,11 +30,11 @@ class S3Collector:
             # List all buckets
             response = self.s3_client.list_buckets()
             buckets = response.get("Buckets", [])
-            
+
             if not buckets:
                 print("No S3 buckets found", file=sys.stderr)
                 return assets
-            
+
             print(f"Found {len(buckets)} S3 buckets, processing...", file=sys.stderr)
 
             for i, bucket_info in enumerate(buckets, 1):
@@ -161,13 +161,13 @@ class S3Collector:
                     total_size += size
                     object_count += 1
                     storage_classes[storage_class] = storage_classes.get(storage_class, 0) + size
-                    
+
                     # Limit object counting to prevent hanging on huge buckets
                     if object_count >= max_objects_to_check:
                         # Estimate total size based on sampled objects
                         # This is approximate but prevents hanging
                         break
-                
+
                 if object_count >= max_objects_to_check:
                     break
         except ClientError:

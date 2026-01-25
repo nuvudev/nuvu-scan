@@ -35,7 +35,7 @@ class AWSScanner(CloudProviderScan):
         self.session = self._create_session()
         self.collectors = self._initialize_collectors()
         self.cost_explorer = CostExplorerCollector(self.session, self.config.regions)
-        
+
         # Auto-detect account ID if not provided
         if not self.config.account_id:
             self.config.account_id = self._get_account_id()
@@ -183,7 +183,7 @@ class AWSScanner(CloudProviderScan):
             sts_client = self.session.client("sts", region_name="us-east-1")
             identity = sts_client.get_caller_identity()
             return identity.get("Account", "unknown")
-        except Exception as e:
+        except Exception:
             # If we can't get account ID, return "unknown"
             return "unknown"
 
@@ -291,7 +291,7 @@ class AWSScanner(CloudProviderScan):
 
     def get_cost_estimate(self, asset: Asset) -> float:
         """Estimate monthly cost for an AWS asset.
-        
+
         First tries to get actual cost from Cost Explorer API.
         Falls back to collector-based estimates if Cost Explorer data is not available.
         """
