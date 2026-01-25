@@ -35,10 +35,10 @@ Update `CHANGELOG.md` (if maintained) or release notes.
 
 ```bash
 git add pyproject.toml
-git commit -m "Bump version to 0.2.0"
-git tag -a v0.2.0 -m "Release v0.2.0"
+git commit -m "Bump version to 1.2.1"
+git tag -a v0.2.0 -m "Release v1.2.1"
 git push origin main
-git push origin v0.2.0
+git push origin v1.2.1
 ```
 
 ### 4. Create GitHub Release
