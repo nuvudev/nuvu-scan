@@ -86,16 +86,16 @@ git push origin v1.3.2
 ### 5. Automated Release & Publishing
 
 **The release workflow (`.github/workflows/release.yml`) automatically:**
+- Detects version bump in `pyproject.toml`
 - Creates a git tag when version is bumped
 - Creates a GitHub release with release notes
-
-**The publish workflow (`.github/workflows/publish.yml`) automatically:**
-- Triggers when a GitHub release is published
 - Builds the package using `uv build`
 - Publishes to PyPI using trusted publishing
 - No manual API tokens needed!
 
 **Complete automation:** Merge PR → Release created → PyPI published! 🚀
+
+**Note:** All steps happen in a single workflow, ensuring reliable execution order and avoiding workflow trigger issues.
 
 ### 5a. Manual Release (Alternative)
 
