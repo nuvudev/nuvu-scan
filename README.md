@@ -1,5 +1,9 @@
 # Nuvu Scan
 
+[![PyPI Downloads](https://img.shields.io/pypi/dm/nuvu-scan?style=flat-square&label=downloads&color=667eea)](https://pypistats.org/packages/nuvu-scan)
+[![GitHub Stars](https://img.shields.io/github/stars/nuvudev/nuvu-scan?style=flat-square&label=stars&color=667eea)](https://github.com/nuvudev/nuvu-scan)
+[![PyPI Version](https://img.shields.io/pypi/v/nuvu-scan?style=flat-square&label=version&color=764ba2)](https://pypi.org/project/nuvu-scan/)
+
 **Take Control of Your Cloud Data Estate**
 Discover, govern, and optimize your cloud data assets across **AWS and GCP** — reduce wasted spend, enforce compliance, and gain full visibility into unused, idle, or risky resources.
 
