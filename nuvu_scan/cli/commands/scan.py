@@ -2,9 +2,12 @@
 Scan command for Nuvu CLI.
 """
 
+import json
 import os
 import sys
 from datetime import datetime
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import click
 
@@ -83,6 +86,23 @@ from ..formatters.json import JSONFormatter
     "--gcp-project",
     help="GCP project ID (default: from service account key or GOOGLE_CLOUD_PROJECT env var)",
 )
+@click.option(
+    "--push",
+    is_flag=True,
+    help="Push scan results to Nuvu Cloud (requires API key)",
+)
+@click.option(
+    "--nuvu-cloud-url",
+    envvar="NUVU_CLOUD_URL",
+    default="https://nuvu.dev",
+    show_default=True,
+    help="Nuvu Cloud base URL",
+)
+@click.option(
+    "--api-key",
+    envvar="NUVU_API_KEY",
+    help="Nuvu Cloud API key (from dashboard account settings)",
+)
 def scan_command(
     provider: str,
     output_format: str,
@@ -98,6 +118,9 @@ def scan_command(
     role_duration_seconds: int,
     gcp_credentials: str | None,
     gcp_project: str | None,
+    push: bool,
+    nuvu_cloud_url: str | None,
+    api_key: str | None,
 ):
     """Scan cloud provider for data assets."""
 
@@ -255,3 +278,42 @@ def scan_command(
         with open(output_file, "w") as f:
             f.write(content)
         click.echo(f"Report written to {output_file}", err=True)
+
+    if push:
+        if not nuvu_cloud_url:
+            click.echo("Error: --nuvu-cloud-url or NUVU_CLOUD_URL is required for --push", err=True)
+            sys.exit(1)
+        if not api_key:
+            click.echo("Error: --api-key or NUVU_API_KEY is required for --push", err=True)
+            sys.exit(1)
+
+        payload = json.loads(JSONFormatter().format(result))
+        payload["scan_regions"] = list(region) if region else None
+        payload["scan_all_regions"] = False if region else True
+
+        import_url = nuvu_cloud_url.rstrip("/") + "/api/scans/import"
+        request = Request(
+            import_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            method="POST",
+        )
+
+        try:
+            with urlopen(request) as response:
+                response_body = response.read().decode("utf-8")
+                click.echo(f"Scan uploaded to Nuvu Cloud: {response.status}", err=True)
+                if response_body:
+                    click.echo(response_body, err=True)
+        except HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            click.echo(f"Failed to upload scan: {e.code} {e.reason}", err=True)
+            if error_body:
+                click.echo(error_body, err=True)
+            sys.exit(1)
+        except URLError as e:
+            click.echo(f"Failed to upload scan: {e.reason}", err=True)
+            sys.exit(1)
