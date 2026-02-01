@@ -1,6 +1,6 @@
 # Nuvu Scan
 
-**Take Control of Your Cloud Data Estate**  
+**Take Control of Your Cloud Data Estate**
 Discover, govern, and optimize your cloud data assets across **AWS and GCP** — reduce wasted spend, enforce compliance, and gain full visibility into unused, idle, or risky resources.
 
 ---
@@ -33,7 +33,7 @@ pip install nuvu-scan
 
 ### Optional: Push results to Nuvu Cloud
 
-Nuvu Scan is fully open-source and runs standalone — no account required.  
+Nuvu Scan is fully open-source and runs standalone — no account required.
 If you want dashboards, team workflows, and long‑term history, you can optionally push results to Nuvu Cloud.
 
 ```bash
@@ -222,7 +222,7 @@ Nuvu requires read-only access to your AWS account. The tool uses the following 
    ```bash
    # Option 1: Create IAM user
    aws iam create-user --user-name nuvu-scan-readonly
-   
+
    # Option 2: Create IAM role (for EC2/ECS/Lambda)
    aws iam create-role --role-name nuvu-scan-readonly --assume-role-policy-document file://trust-policy.json
    ```
@@ -231,7 +231,7 @@ Nuvu requires read-only access to your AWS account. The tool uses the following 
    ```bash
    # For IAM user
    aws iam put-user-policy --user-name nuvu-scan-readonly --policy-name NuvuScanReadOnly --policy-document file://aws-iam-policy.json
-   
+
    # For IAM role
    aws iam put-role-policy --role-name nuvu-scan-readonly --policy-name NuvuScanReadOnly --policy-document file://aws-iam-policy.json
    ```
@@ -251,7 +251,7 @@ Nuvu requires read-only access to your AWS account. The tool uses the following 
    ```
 
    **Method 2: Temporary Credentials (Access Key + Secret Key + Session Token)**
-   
+
    If you're using AWS SSO, assumed roles, or other temporary credentials:
    ```bash
    export AWS_ACCESS_KEY_ID=your-access-key-id
@@ -261,7 +261,7 @@ Nuvu requires read-only access to your AWS account. The tool uses the following 
    ```
 
    **Method 3: IAM Role Assumption**
-   
+
    To assume a role (useful for cross-account access or when using a role with more permissions):
    ```bash
    # With explicit credentials
@@ -269,11 +269,11 @@ Nuvu requires read-only access to your AWS account. The tool uses the following 
      --access-key-id your-access-key-id \
      --secret-access-key your-secret-access-key \
      --role-arn arn:aws:iam::123456789012:role/MyRole
-   
+
    # From default credentials (e.g., EC2 instance role)
    nuvu scan --provider aws \
      --role-arn arn:aws:iam::123456789012:role/MyRole
-   
+
    # With external ID (if required by the role)
    nuvu scan --provider aws \
      --role-arn arn:aws:iam::123456789012:role/MyRole \

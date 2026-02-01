@@ -50,11 +50,11 @@ class GCPScanner(CloudProviderScan):
         try:
             creds, _ = default()
             return creds
-        except DefaultCredentialsError:
+        except DefaultCredentialsError as e:
             raise ValueError(
                 "GCP credentials not found. Provide service_account_key_file, "
                 "service_account_key_json, or set GOOGLE_APPLICATION_CREDENTIALS"
-            )
+            ) from e
 
     def _get_project_id(self) -> str:
         """Get GCP project ID from credentials or config."""
@@ -112,6 +112,7 @@ class GCPScanner(CloudProviderScan):
             unknown = set(requested_lower) - known
             if unknown:
                 import sys
+
                 print(f"Warning: Unknown collectors ignored: {', '.join(unknown)}", file=sys.stderr)
                 print(f"Available collectors: {', '.join(sorted(known))}", file=sys.stderr)
 

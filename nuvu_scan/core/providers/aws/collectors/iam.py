@@ -26,7 +26,7 @@ class IAMCollector:
     def collect(self) -> list[Asset]:
         """Collect IAM roles with data-access permissions."""
         import sys
-        
+
         assets = []
 
         try:
@@ -38,7 +38,10 @@ class IAMCollector:
             for page in paginator.paginate():
                 roles.extend(page.get("Roles", []))
 
-            print(f"  → Found {len(roles)} roles, checking data-access permissions...", file=sys.stderr)
+            print(
+                f"  → Found {len(roles)} roles, checking data-access permissions...",
+                file=sys.stderr,
+            )
             data_roles_count = 0
             for role in roles:
                 try:

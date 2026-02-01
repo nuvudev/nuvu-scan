@@ -24,7 +24,7 @@ class RedshiftCollector:
     def collect(self) -> list[Asset]:
         """Collect all Redshift resources."""
         import sys
-        
+
         assets = []
 
         # Collect reserved nodes first to compare with clusters
@@ -65,33 +65,35 @@ class RedshiftCollector:
     def _get_reserved_nodes(self) -> dict[str, list[dict]]:
         """Get reserved nodes per region for comparison with on-demand clusters."""
         reserved_by_region = {}
-        
+
         regions_to_check = self.regions if self.regions else ["us-east-1"]
-        
+
         for region in regions_to_check:
             try:
                 redshift_client = self.session.client("redshift", region_name=region)
                 response = redshift_client.describe_reserved_nodes()
-                
+
                 active_reservations = []
                 for node in response.get("ReservedNodes", []):
                     if node.get("State") == "active":
-                        active_reservations.append({
-                            "node_type": node.get("NodeType"),
-                            "node_count": node.get("NodeCount", 0),
-                            "duration": node.get("Duration", 0),
-                            "start_time": node.get("StartTime"),
-                            "offering_type": node.get("OfferingType"),
-                            "reserved_node_id": node.get("ReservedNodeId"),
-                        })
-                
+                        active_reservations.append(
+                            {
+                                "node_type": node.get("NodeType"),
+                                "node_count": node.get("NodeCount", 0),
+                                "duration": node.get("Duration", 0),
+                                "start_time": node.get("StartTime"),
+                                "offering_type": node.get("OfferingType"),
+                                "reserved_node_id": node.get("ReservedNodeId"),
+                            }
+                        )
+
                 reserved_by_region[region] = active_reservations
-                
+
             except ClientError as e:
                 if "AccessDenied" not in str(e):
                     print(f"Error getting reserved nodes in {region}: {e}")
                 reserved_by_region[region] = []
-        
+
         return reserved_by_region
 
     def _get_account_id(self) -> str:
@@ -126,34 +128,38 @@ class RedshiftCollector:
                     node_count = cluster.get("NumberOfNodes", 0)
                     node_type = cluster.get("NodeType", "")
                     db_name = cluster.get("DBName", "")
-                    
+
                     # Get encryption status
                     encrypted = cluster.get("Encrypted", False)
-                    
+
                     # Get VPC security info
                     publicly_accessible = cluster.get("PubliclyAccessible", False)
                     vpc_id = cluster.get("VpcId", "")
-                    
+
                     # Get tags
                     tags = {tag["Key"]: tag["Value"] for tag in cluster.get("Tags", [])}
                     ownership = self._infer_ownership(tags, cluster_id)
-                    
+
                     # Get last activity from CloudWatch metrics
                     last_activity = self._get_last_activity_cloudwatch(cluster_id, region)
                     days_since_last_use = self._calculate_days_since_last_use(last_activity)
-                    
+
                     # Check if cluster is covered by reserved nodes
-                    reservation_status = self._check_reservation_coverage(region, node_type, node_count)
-                    
+                    reservation_status = self._check_reservation_coverage(
+                        region, node_type, node_count
+                    )
+
                     # Get WLM configuration
                     wlm_config = self._get_wlm_configuration(redshift_client, cluster_id)
-                    
+
                     # Calculate cluster age for reservation recommendation
                     create_time = cluster.get("ClusterCreateTime")
                     cluster_age_days = None
                     if create_time:
-                        cluster_age_days = (datetime.now(timezone.utc) - create_time.replace(tzinfo=timezone.utc)).days
-                    
+                        cluster_age_days = (
+                            datetime.now(timezone.utc) - create_time.replace(tzinfo=timezone.utc)
+                        ).days
+
                     # Build risk flags
                     risk_flags = []
                     if publicly_accessible:
@@ -164,28 +170,38 @@ class RedshiftCollector:
                         risk_flags.append("low_activity")
                     if days_since_last_use is not None and days_since_last_use > 90:
                         risk_flags.append("potentially_unused")
-                    
+
                     # Reservation-related risks (cost optimization)
-                    if not reservation_status["covered"] and cluster_age_days and cluster_age_days > 90:
+                    if (
+                        not reservation_status["covered"]
+                        and cluster_age_days
+                        and cluster_age_days > 90
+                    ):
                         risk_flags.append("no_reservation_long_running")
-                    
+
                     # WLM risks
                     if wlm_config.get("is_default_only"):
                         risk_flags.append("default_wlm_only")
                     if wlm_config.get("has_unlimited_queue"):
                         risk_flags.append("unlimited_wlm_queue")
-                    
+
                     # Get maintenance window info
                     maintenance_window = cluster.get("PreferredMaintenanceWindow", "")
-                    
+
                     # Estimate cost based on node type and count
                     monthly_cost = self._estimate_cluster_cost(node_type, node_count)
-                    
+
                     # Calculate potential savings from reservation
                     potential_reservation_savings = 0.0
-                    if not reservation_status["covered"] and cluster_age_days and cluster_age_days > 30:
+                    if (
+                        not reservation_status["covered"]
+                        and cluster_age_days
+                        and cluster_age_days > 30
+                    ):
                         # Reserved nodes typically save 30-75% depending on term
-                        potential_reservation_savings = monthly_cost * 0.40  # Conservative 40% estimate
+                        potential_reservation_savings = (
+                            monthly_cost * 0.40
+                        )  # Conservative 40% estimate
 
                     assets.append(
                         Asset(
@@ -225,12 +241,16 @@ class RedshiftCollector:
                                 # Reservation info
                                 "has_reservation": reservation_status["covered"],
                                 "reserved_nodes_count": reservation_status.get("reserved_count", 0),
-                                "on_demand_nodes_count": reservation_status.get("on_demand_count", node_count),
+                                "on_demand_nodes_count": reservation_status.get(
+                                    "on_demand_count", node_count
+                                ),
                                 "potential_reservation_savings_usd": potential_reservation_savings,
                                 # WLM configuration
                                 "wlm_queue_count": wlm_config.get("queue_count", 0),
                                 "wlm_is_default_only": wlm_config.get("is_default_only", True),
-                                "wlm_has_unlimited_queue": wlm_config.get("has_unlimited_queue", False),
+                                "wlm_has_unlimited_queue": wlm_config.get(
+                                    "has_unlimited_queue", False
+                                ),
                                 "wlm_auto_wlm": wlm_config.get("auto_wlm", False),
                             },
                             cost_estimate_usd=monthly_cost,
@@ -262,7 +282,8 @@ class RedshiftCollector:
                     # Get workgroups for namespace
                     workgroups_response = redshift_client.list_workgroups()
                     associated_workgroups = [
-                        wg for wg in workgroups_response.get("workgroups", [])
+                        wg
+                        for wg in workgroups_response.get("workgroups", [])
                         if wg.get("namespaceName") == namespace_name
                     ]
                     workgroup_count = len(associated_workgroups)
@@ -270,7 +291,7 @@ class RedshiftCollector:
                     # Check for encryption
                     kms_key = namespace.get("kmsKeyId")
                     encrypted = bool(kms_key)
-                    
+
                     risk_flags = []
                     if not encrypted:
                         risk_flags.append("unencrypted")
@@ -311,14 +332,14 @@ class RedshiftCollector:
                     for wg in associated_workgroups:
                         wg_name = wg.get("workgroupName", "")
                         base_capacity = wg.get("baseCapacity", 0)
-                        
+
                         # Estimate cost: Serverless charges $0.36/RPU-hour
                         # Assume 10% utilization for base estimate
                         estimated_monthly_cost = base_capacity * 0.36 * 24 * 30 * 0.1
-                        
+
                         # Check public accessibility
                         publicly_accessible = wg.get("publiclyAccessible", False)
-                        
+
                         wg_risk_flags = []
                         if publicly_accessible:
                             wg_risk_flags.append("publicly_accessible")
@@ -330,7 +351,10 @@ class RedshiftCollector:
                                 normalized_category=NormalizedCategory.DATA_WAREHOUSE,
                                 service="Redshift Serverless",
                                 region=region,
-                                arn=wg.get("workgroupArn", f"arn:aws:redshift-serverless:{region}:{self._get_account_id()}:workgroup/{wg_name}"),
+                                arn=wg.get(
+                                    "workgroupArn",
+                                    f"arn:aws:redshift-serverless:{region}:{self._get_account_id()}:workgroup/{wg_name}",
+                                ),
                                 name=wg_name,
                                 created_at=(
                                     wg.get("creationDate", "").isoformat()
@@ -367,34 +391,36 @@ class RedshiftCollector:
                 # Get all datashares
                 try:
                     response = redshift_client.describe_data_shares()
-                    
+
                     for datashare in response.get("DataShares", []):
                         share_arn = datashare.get("DataShareArn", "")
                         share_name = share_arn.split("/")[-1] if "/" in share_arn else share_arn
                         producer_arn = datashare.get("ProducerArn", "")
-                        
+
                         # Get associations (consumers)
                         associations = datashare.get("DataShareAssociations", [])
                         consumer_accounts = []
                         cross_account = False
                         cross_region = False
-                        
+
                         for assoc in associations:
                             consumer_id = assoc.get("ConsumerIdentifier", "")
                             consumer_region = assoc.get("ConsumerRegion", "")
                             status = assoc.get("Status", "")
-                            
+
                             if consumer_id and consumer_id != self._get_account_id():
                                 cross_account = True
                             if consumer_region and consumer_region != region:
                                 cross_region = True
-                            
-                            consumer_accounts.append({
-                                "account_id": consumer_id,
-                                "region": consumer_region,
-                                "status": status,
-                            })
-                        
+
+                            consumer_accounts.append(
+                                {
+                                    "account_id": consumer_id,
+                                    "region": consumer_region,
+                                    "status": status,
+                                }
+                            )
+
                         # Build risk flags
                         risk_flags = []
                         if cross_account:
@@ -403,10 +429,14 @@ class RedshiftCollector:
                             risk_flags.append("cross_region_sharing")
                         if datashare.get("AllowPubliclyAccessibleConsumers", False):
                             risk_flags.append("allows_public_consumers")
-                        
+
                         # Determine share type
-                        share_type = "OUTBOUND" if producer_arn.split(":")[4] == self._get_account_id() else "INBOUND"
-                        
+                        share_type = (
+                            "OUTBOUND"
+                            if producer_arn.split(":")[4] == self._get_account_id()
+                            else "INBOUND"
+                        )
+
                         assets.append(
                             Asset(
                                 provider="aws",
@@ -424,11 +454,13 @@ class RedshiftCollector:
                                     "consumers": consumer_accounts[:5],  # Limit to first 5 for size
                                     "cross_account": cross_account,
                                     "cross_region": cross_region,
-                                    "allows_public_consumers": datashare.get("AllowPubliclyAccessibleConsumers", False),
+                                    "allows_public_consumers": datashare.get(
+                                        "AllowPubliclyAccessibleConsumers", False
+                                    ),
                                 },
                             )
                         )
-                        
+
                 except ClientError as e:
                     if "AccessDenied" not in str(e):
                         print(f"Error collecting datashares in {region}: {e}")
@@ -475,10 +507,10 @@ class RedshiftCollector:
         """Get last activity timestamp using CloudWatch metrics (more reliable than CloudTrail)."""
         try:
             cloudwatch = self.session.client("cloudwatch", region_name=region)
-            
+
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(days=14)  # Look back 14 days
-            
+
             # Check DatabaseConnections metric - indicates actual usage
             response = cloudwatch.get_metric_statistics(
                 Namespace="AWS/Redshift",
@@ -491,7 +523,7 @@ class RedshiftCollector:
                 Period=3600,  # 1 hour granularity
                 Statistics=["Maximum"],
             )
-            
+
             datapoints = response.get("Datapoints", [])
             if datapoints:
                 # Find the most recent datapoint with connections > 0
@@ -502,7 +534,7 @@ class RedshiftCollector:
                 else:
                     # No connections in the last 14 days
                     return None
-            
+
             # Fallback to CPUUtilization as activity indicator
             response = cloudwatch.get_metric_statistics(
                 Namespace="AWS/Redshift",
@@ -515,7 +547,7 @@ class RedshiftCollector:
                 Period=3600,
                 Statistics=["Average"],
             )
-            
+
             datapoints = response.get("Datapoints", [])
             if datapoints:
                 # Find most recent with CPU > 5% (indicates active queries)
@@ -523,7 +555,7 @@ class RedshiftCollector:
                 if active_points:
                     latest = max(active_points, key=lambda x: x["Timestamp"])
                     return latest["Timestamp"].isoformat()
-                    
+
         except ClientError as e:
             if "AccessDenied" not in str(e):
                 print(f"Error getting CloudWatch metrics for {cluster_id}: {e}")
@@ -584,11 +616,11 @@ class RedshiftCollector:
     def _check_reservation_coverage(self, region: str, node_type: str, node_count: int) -> dict:
         """Check if cluster nodes are covered by reserved nodes."""
         reserved_nodes = self._reserved_nodes.get(region, [])
-        
+
         # Find matching reservations by node type
         matching = [r for r in reserved_nodes if r.get("node_type") == node_type]
         total_reserved = sum(r.get("node_count", 0) for r in matching)
-        
+
         if total_reserved >= node_count:
             return {
                 "covered": True,
@@ -608,88 +640,112 @@ class RedshiftCollector:
             # Get cluster parameter group
             clusters_resp = redshift_client.describe_clusters(ClusterIdentifier=cluster_id)
             clusters = clusters_resp.get("Clusters", [])
-            
+
             if not clusters:
-                return {"queue_count": 0, "is_default_only": True, "has_unlimited_queue": False, "auto_wlm": False}
-            
+                return {
+                    "queue_count": 0,
+                    "is_default_only": True,
+                    "has_unlimited_queue": False,
+                    "auto_wlm": False,
+                }
+
             cluster = clusters[0]
             param_groups = cluster.get("ClusterParameterGroups", [])
-            
+
             if not param_groups:
-                return {"queue_count": 0, "is_default_only": True, "has_unlimited_queue": False, "auto_wlm": False}
-            
+                return {
+                    "queue_count": 0,
+                    "is_default_only": True,
+                    "has_unlimited_queue": False,
+                    "auto_wlm": False,
+                }
+
             param_group_name = param_groups[0].get("ParameterGroupName", "")
-            
+
             # Get WLM configuration from parameter group
             params_resp = redshift_client.describe_cluster_parameters(
                 ParameterGroupName=param_group_name
             )
-            
+
             wlm_config = {
                 "queue_count": 0,
                 "is_default_only": True,
                 "has_unlimited_queue": False,
                 "auto_wlm": False,
             }
-            
+
             for param in params_resp.get("Parameters", []):
                 param_name = param.get("ParameterName", "")
                 param_value = param.get("ParameterValue", "")
-                
+
                 if param_name == "wlm_json_configuration" and param_value:
                     try:
                         import json
+
                         wlm_json = json.loads(param_value)
-                        
+
                         if isinstance(wlm_json, list):
                             wlm_config["queue_count"] = len(wlm_json)
                             wlm_config["is_default_only"] = len(wlm_json) <= 1
-                            
+
                             for queue in wlm_json:
-                                if queue.get("query_concurrency", 0) == 0 or queue.get("memory_percent_to_use", 0) == 100:
+                                if (
+                                    queue.get("query_concurrency", 0) == 0
+                                    or queue.get("memory_percent_to_use", 0) == 100
+                                ):
                                     wlm_config["has_unlimited_queue"] = True
                                 if queue.get("auto_wlm"):
                                     wlm_config["auto_wlm"] = True
                     except (json.JSONDecodeError, TypeError):
                         pass
-            
+
             return wlm_config
-            
+
         except ClientError as e:
             if "AccessDenied" not in str(e) and "ClusterNotFound" not in str(e):
                 print(f"Error getting WLM config for {cluster_id}: {e}")
-            return {"queue_count": 0, "is_default_only": True, "has_unlimited_queue": False, "auto_wlm": False}
+            return {
+                "queue_count": 0,
+                "is_default_only": True,
+                "has_unlimited_queue": False,
+                "auto_wlm": False,
+            }
 
     def _collect_snapshots(self) -> list[Asset]:
         """Collect Redshift snapshots with cost and retention analysis."""
         assets = []
-        
+
         regions_to_check = self.regions if self.regions else ["us-east-1"]
-        
+
         for region in regions_to_check:
             try:
                 redshift_client = self.session.client("redshift", region_name=region)
-                
+
                 # Get all snapshots (both manual and automated)
                 for snapshot_type in ["manual", "automated"]:
                     try:
                         paginator = redshift_client.get_paginator("describe_cluster_snapshots")
-                        
+
                         for page in paginator.paginate(SnapshotType=snapshot_type):
                             for snapshot in page.get("Snapshots", []):
                                 snapshot_id = snapshot.get("SnapshotIdentifier", "")
                                 cluster_id = snapshot.get("ClusterIdentifier", "")
-                                
+
                                 # Get snapshot details
                                 create_time = snapshot.get("SnapshotCreateTime")
-                                snapshot_size_gb = snapshot.get("TotalBackupSizeInMegaBytes", 0) / 1024
+                                snapshot_size_gb = (
+                                    snapshot.get("TotalBackupSizeInMegaBytes", 0) / 1024
+                                )
                                 status = snapshot.get("Status", "unknown")
-                                
+
                                 # Calculate age
                                 snapshot_age_days = None
                                 if create_time:
-                                    snapshot_age_days = (datetime.now(timezone.utc) - create_time.replace(tzinfo=timezone.utc)).days
-                                
+                                    snapshot_age_days = (
+                                        datetime.now(timezone.utc)
+                                        - create_time.replace(tzinfo=timezone.utc)
+                                    ).days
+
                                 # Estimate storage cost (~$0.024/GB-month for Redshift snapshots)
                                 # Note: Automated snapshots are FREE up to cluster storage size
                                 # Only manual snapshots and storage beyond cluster size are billed
@@ -698,29 +754,34 @@ class RedshiftCollector:
                                     monthly_storage_cost = 0.0  # Free tier
                                 else:
                                     monthly_storage_cost = snapshot_size_gb * 0.024
-                                
+
                                 # Build risk flags
                                 risk_flags = []
-                                
+
                                 # Flag old manual snapshots (potential cost waste)
                                 if snapshot_type == "manual":
                                     if snapshot_age_days and snapshot_age_days > 90:
                                         risk_flags.append("old_snapshot")
                                     if snapshot_age_days and snapshot_age_days > 365:
                                         risk_flags.append("very_old_snapshot")
-                                
+
                                 # Large snapshots
                                 if snapshot_size_gb > 1000:  # > 1TB
                                     risk_flags.append("large_snapshot")
-                                
+
                                 # Check if source cluster still exists
-                                is_orphan = snapshot.get("ClusterCreateTime") is None and snapshot_type == "manual"
+                                is_orphan = (
+                                    snapshot.get("ClusterCreateTime") is None
+                                    and snapshot_type == "manual"
+                                )
                                 if is_orphan:
                                     risk_flags.append("orphan_snapshot")
-                                
+
                                 # Get tags
-                                tags = {tag["Key"]: tag["Value"] for tag in snapshot.get("Tags", [])}
-                                
+                                tags = {
+                                    tag["Key"]: tag["Value"] for tag in snapshot.get("Tags", [])
+                                }
+
                                 assets.append(
                                     Asset(
                                         provider="aws",
@@ -728,7 +789,10 @@ class RedshiftCollector:
                                         normalized_category=NormalizedCategory.DATA_WAREHOUSE,
                                         service="Redshift",
                                         region=region,
-                                        arn=snapshot.get("SnapshotArn", f"arn:aws:redshift:{region}:{self._get_account_id()}:snapshot:{cluster_id}/{snapshot_id}"),
+                                        arn=snapshot.get(
+                                            "SnapshotArn",
+                                            f"arn:aws:redshift:{region}:{self._get_account_id()}:snapshot:{cluster_id}/{snapshot_id}",
+                                        ),
                                         name=snapshot_id,
                                         created_at=create_time.isoformat() if create_time else None,
                                         tags=tags,
@@ -743,31 +807,33 @@ class RedshiftCollector:
                                             "age_days": snapshot_age_days,
                                             "encrypted": snapshot.get("Encrypted", False),
                                             "is_orphan": is_orphan,
-                                            "retention_period": snapshot.get("ManualSnapshotRetentionPeriod", -1),
+                                            "retention_period": snapshot.get(
+                                                "ManualSnapshotRetentionPeriod", -1
+                                            ),
                                         },
                                     )
                                 )
-                                
+
                     except ClientError as e:
                         if "AccessDenied" not in str(e):
                             print(f"Error collecting {snapshot_type} snapshots in {region}: {e}")
-                            
+
             except ClientError as e:
                 print(f"Error collecting Redshift snapshots in {region}: {e}")
-        
+
         return assets
 
     def _collect_reserved_nodes_as_assets(self) -> list[Asset]:
         """Create assets for reserved nodes for visibility and tracking."""
         assets = []
-        
+
         regions_to_check = self.regions if self.regions else ["us-east-1"]
-        
+
         for region in regions_to_check:
             try:
                 redshift_client = self.session.client("redshift", region_name=region)
                 response = redshift_client.describe_reserved_nodes()
-                
+
                 for node in response.get("ReservedNodes", []):
                     node_id = node.get("ReservedNodeId", "")
                     node_type = node.get("NodeType", "")
@@ -776,28 +842,30 @@ class RedshiftCollector:
                     offering_type = node.get("OfferingType", "")
                     duration = node.get("Duration", 0)  # seconds
                     start_time = node.get("StartTime")
-                    
+
                     # Calculate remaining time
                     remaining_days = None
                     is_expired = False
                     is_expiring_soon = False
-                    
+
                     if start_time and duration:
                         end_time = start_time + timedelta(seconds=duration)
                         remaining_days = (end_time - datetime.now(timezone.utc)).days
-                        
+
                         if remaining_days < 0:
                             is_expired = True
                             remaining_days = 0
                         elif remaining_days < 30:
                             is_expiring_soon = True
-                    
+
                     # Calculate annual cost
                     fixed_price = node.get("FixedPrice", 0)
                     recurring_charges = node.get("RecurringCharges", [])
-                    monthly_recurring = sum(c.get("RecurringChargeAmount", 0) for c in recurring_charges)
+                    monthly_recurring = sum(
+                        c.get("RecurringChargeAmount", 0) for c in recurring_charges
+                    )
                     annual_cost = fixed_price + (monthly_recurring * 12)
-                    
+
                     # Build risk flags
                     risk_flags = []
                     if is_expired:
@@ -806,7 +874,7 @@ class RedshiftCollector:
                         risk_flags.append("reservation_expiring_soon")
                     if state != "active":
                         risk_flags.append(f"reservation_{state}")
-                    
+
                     assets.append(
                         Asset(
                             provider="aws",
@@ -834,9 +902,9 @@ class RedshiftCollector:
                             },
                         )
                     )
-                    
+
             except ClientError as e:
                 if "AccessDenied" not in str(e):
                     print(f"Error collecting reserved nodes in {region}: {e}")
-        
+
         return assets
