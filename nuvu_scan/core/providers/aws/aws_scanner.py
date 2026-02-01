@@ -13,7 +13,6 @@ from nuvu_scan.core.base import (
     CloudProviderScan,
     NormalizedCategory,
     ScanConfig,
-    ScanResult,
 )
 
 from .collectors.athena import AthenaCollector
