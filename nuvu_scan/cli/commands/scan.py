@@ -83,6 +83,22 @@ from ..formatters.json import JSONFormatter
     "--gcp-project",
     help="GCP project ID (default: from service account key or GOOGLE_CLOUD_PROJECT env var)",
 )
+@click.option(
+    "--push",
+    is_flag=True,
+    help="Push scan results to Nuvu Cloud (requires --api-key)",
+)
+@click.option(
+    "--api-key",
+    envvar="NUVU_API_KEY",
+    help="Nuvu Cloud API key for pushing results (default: from NUVU_API_KEY env var)",
+)
+@click.option(
+    "--api-url",
+    envvar="NUVU_API_URL",
+    default="https://nuvu.dev",
+    help="Nuvu Cloud API URL (default: https://nuvu.dev)",
+)
 def scan_command(
     provider: str,
     output_format: str,
@@ -98,6 +114,9 @@ def scan_command(
     role_duration_seconds: int,
     gcp_credentials: str | None,
     gcp_project: str | None,
+    push: bool,
+    api_key: str | None,
+    api_url: str,
 ):
     """Scan cloud provider for data assets."""
 
@@ -255,3 +274,72 @@ def scan_command(
         with open(output_file, "w") as f:
             f.write(content)
         click.echo(f"Report written to {output_file}", err=True)
+
+    # Push to Nuvu Cloud if requested
+    if push:
+        if not api_key:
+            click.echo(
+                "Error: --api-key required for pushing results (or set NUVU_API_KEY env var)",
+                err=True,
+            )
+            sys.exit(1)
+
+        click.echo(f"Pushing results to Nuvu Cloud ({api_url})...", err=True)
+        try:
+            import httpx
+
+            # Prepare payload matching ScanImport schema
+            # Extract unique regions from assets
+            scan_regions = list(set(asset.region for asset in result.assets if asset.region))
+
+            payload = {
+                "provider": provider,
+                "account_id": result.account_id or "unknown",
+                "scan_timestamp": result.scan_timestamp or datetime.utcnow().isoformat(),
+                "total_cost_estimate_usd": result.total_cost_estimate_usd,
+                "scan_regions": scan_regions if scan_regions else None,
+                "scan_all_regions": not bool(region),
+                "assets": [
+                    {
+                        "provider": asset.provider,
+                        "asset_type": asset.asset_type,
+                        "normalized_category": asset.normalized_category.value if asset.normalized_category else "unknown",
+                        "service": asset.service or asset.asset_type.split("_")[0] if asset.asset_type else "unknown",
+                        "region": asset.region,
+                        "arn": asset.arn,
+                        "name": asset.name,
+                        "created_at": asset.created_at,
+                        "last_activity_at": asset.last_activity_at,
+                        "size_bytes": asset.size_bytes,
+                        "tags": asset.tags,
+                        "cost_estimate_usd": asset.cost_estimate_usd,
+                        "risk_flags": asset.risk_flags,
+                        "ownership_confidence": asset.ownership_confidence or "unknown",
+                        "suggested_owner": asset.suggested_owner,
+                    }
+                    for asset in result.assets
+                ],
+            }
+
+            # Push to API using the /api/scans/import endpoint
+            with httpx.Client(timeout=60) as client:
+                response = client.post(
+                    f"{api_url.rstrip('/')}/api/scans/import",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                response.raise_for_status()
+                result_data = response.json()
+                click.echo(
+                    f"✓ Pushed {len(result.assets)} assets to Nuvu Cloud (scan_id: {result_data.get('id', 'N/A')})",
+                    err=True,
+                )
+        except httpx.HTTPStatusError as e:
+            click.echo(f"Error pushing to Nuvu Cloud: {e.response.status_code} - {e.response.text}", err=True)
+            sys.exit(1)
+        except Exception as e:
+            click.echo(f"Error pushing to Nuvu Cloud: {e}", err=True)
+            sys.exit(1)
