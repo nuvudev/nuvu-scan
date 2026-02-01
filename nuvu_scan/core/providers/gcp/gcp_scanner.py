@@ -27,6 +27,9 @@ class GCPScanner(CloudProviderScan):
         super().__init__(config)
         self.credentials = self._create_credentials()
         self.project_id = self._get_project_id()
+        # Set account_id to project_id for consistency in ScanResult
+        if not self.config.account_id:
+            self.config.account_id = self.project_id
         self.collectors = self._initialize_collectors()
 
     def _create_credentials(self):

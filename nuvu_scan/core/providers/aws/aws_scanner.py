@@ -33,55 +33,19 @@ class AWSScanner(CloudProviderScan):
     def __init__(self, config: ScanConfig):
         super().__init__(config)
         self.session = self._create_session()
-        if not self.config.regions:
-            self.config.regions = self._resolve_regions()
-        self.collectors = self._initialize_collectors()
-        self.cost_explorer = CostExplorerCollector(self.session, self.config.regions)
-
         # Auto-detect account ID if not provided
         if not self.config.account_id:
             self.config.account_id = self._get_account_id()
+        self.collectors = self._initialize_collectors()
+        self.cost_explorer = CostExplorerCollector(self.session, self.config.regions)
 
-    def scan(self):
-        """Execute a full scan with AWS-specific cost handling."""
-        from datetime import datetime
-
-        # Discover assets
-        assets = self.list_assets()
-
-        # Analyze each asset
-        total_estimated_cost = 0.0
-        actual_total_cost = None
-        actual_service_costs = None
-
-        for asset in assets:
-            if asset.asset_type == "cost_summary":
-                actual_total_cost = asset.usage_metrics.get("total_actual_cost_30d")
-                actual_service_costs = asset.usage_metrics.get("actual_costs_30d")
-                continue
-
-            asset.usage_metrics = self.get_usage_metrics(asset)
-            asset.cost_estimate_usd = self.get_cost_estimate(asset)
-            total_estimated_cost += asset.cost_estimate_usd or 0.0
-
-        # Build summary
-        summary = self._build_summary(assets)
-        if actual_total_cost is not None:
-            summary["total_actual_cost_30d"] = actual_total_cost
-            summary["actual_costs_30d"] = actual_service_costs or {}
-            summary["estimated_assets_cost_total"] = total_estimated_cost
-
-        # Use actual 30-day cost if available, otherwise fallback to estimates
-        total_cost = actual_total_cost if actual_total_cost is not None else total_estimated_cost
-
-        return ScanResult(
-            provider=self.provider,
-            account_id=self.config.account_id or "unknown",
-            scan_timestamp=datetime.utcnow().isoformat(),
-            assets=assets,
-            total_cost_estimate_usd=total_cost,
-            summary=summary,
-        )
+    def _get_account_id(self) -> str:
+        """Get the AWS account ID using STS."""
+        try:
+            sts_client = self.session.client("sts")
+            return sts_client.get_caller_identity()["Account"]
+        except Exception:
+            return "unknown"
 
     def _create_session(self) -> boto3.Session:
         """
