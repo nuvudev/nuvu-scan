@@ -148,6 +148,41 @@ nuvu scan --provider gcp --gcp-credentials /path/to/service-account-key.json --g
 nuvu scan --provider gcp --gcp-project your-project-id --output-format json --output-file gcp-report.json
 ```
 
+### Selective Scanning (Collectors)
+
+Run focused scans on specific services instead of a full scan:
+
+```bash
+# List available collectors for a provider
+nuvu scan --provider aws --list-collectors
+# Output: athena, glue, iam, mwaa, redshift, s3
+
+nuvu scan --provider gcp --list-collectors
+# Output: bigquery, dataproc, gcs, gemini, iam, pubsub
+
+# Scan only Redshift
+nuvu scan --provider aws -c redshift --region us-west-2
+
+# Scan multiple specific collectors
+nuvu scan --provider aws -c redshift -c glue --region us-west-2
+
+# Scan only S3 buckets
+nuvu scan --provider aws -c s3 --output-format html
+
+# Full scan (default - all collectors)
+nuvu scan --provider aws  # Runs all collectors
+
+# GCP: Scan only BigQuery
+nuvu scan --provider gcp -c bigquery --gcp-project your-project
+```
+
+**Benefits of selective scanning:**
+- **Faster scans** - Focus on services you care about
+- **Reduced API calls** - Only query the services you need
+- **Targeted reports** - Generate reports for specific areas
+
+---
+
 ## Features
 
 - **Asset Discovery**: Automatically discovers cloud data assets:

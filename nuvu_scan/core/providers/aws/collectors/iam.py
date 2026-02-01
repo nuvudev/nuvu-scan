@@ -25,16 +25,21 @@ class IAMCollector:
 
     def collect(self) -> list[Asset]:
         """Collect IAM roles with data-access permissions."""
+        import sys
+        
         assets = []
 
         try:
             # List all IAM roles
+            print("  → Listing IAM roles...", file=sys.stderr)
             paginator = self.iam_client.get_paginator("list_roles")
             roles = []
 
             for page in paginator.paginate():
                 roles.extend(page.get("Roles", []))
 
+            print(f"  → Found {len(roles)} roles, checking data-access permissions...", file=sys.stderr)
+            data_roles_count = 0
             for role in roles:
                 try:
                     role_name = role["RoleName"]
@@ -126,6 +131,7 @@ class IAMCollector:
                     )
 
                     assets.append(asset)
+                    data_roles_count += 1
 
                 except ClientError as e:
                     # Skip roles we can't access
