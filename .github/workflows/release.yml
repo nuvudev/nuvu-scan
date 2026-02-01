@@ -18,21 +18,21 @@ jobs:
     permissions:
       contents: write  # Required to create tags and releases
       id-token: write  # Required for trusted publishing
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch full history for version comparison
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-      
+
       - name: Set up Python
         run: uv python install 3.12
-      
+
       - name: Extract version from pyproject.toml
         id: get_version
         run: |
@@ -41,18 +41,18 @@ jobs:
           VERSION=$(grep -E '^\s*version\s*=' pyproject.toml | head -1 | sed -E "s/.*version\s*=\s*['\"]([^'\"]+)['\"].*/\1/" | tr -d ' ')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $VERSION"
-      
+
       - name: Check if version was bumped
         id: check_version
         if: github.event_name == 'push'
         run: |
           CURRENT_VERSION="${{ steps.get_version.outputs.version }}"
-          
+
           # Get the previous commit's version
           git checkout HEAD~1 pyproject.toml 2>/dev/null || echo "No previous commit found"
           PREVIOUS_VERSION=$(grep -E '^\s*version\s*=' pyproject.toml 2>/dev/null | head -1 | sed -E "s/.*version\s*=\s*['\"]([^'\"]+)['\"].*/\1/" | tr -d ' ' || echo "")
           git checkout HEAD pyproject.toml
-          
+
           if [ -z "$PREVIOUS_VERSION" ]; then
             echo "No previous version found, assuming first release"
             echo "should_release=true" >> $GITHUB_OUTPUT
@@ -63,7 +63,7 @@ jobs:
             echo "Version unchanged ($CURRENT_VERSION), skipping release"
             echo "should_release=false" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Check if tag already exists
         id: check_tag
         if: |
@@ -72,7 +72,7 @@ jobs:
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
           TAG="v${VERSION}"
-          
+
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists, skipping release"
             echo "tag_exists=true" >> $GITHUB_OUTPUT
@@ -80,7 +80,7 @@ jobs:
             echo "Tag $TAG does not exist, will create release"
             echo "tag_exists=false" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Create Git Tag
         if: |
           ((github.event_name == 'push' && steps.check_version.outputs.should_release == 'true' && steps.check_tag.outputs.tag_exists == 'false') ||
@@ -88,14 +88,14 @@ jobs:
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
           TAG="v${VERSION}"
-          
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
           echo "Created and pushed tag: $TAG"
-      
+
       - name: Create GitHub Release
         if: |
           ((github.event_name == 'push' && steps.check_version.outputs.should_release == 'true' && steps.check_tag.outputs.tag_exists == 'false') ||
@@ -106,12 +106,12 @@ jobs:
           name: Release v${{ steps.get_version.outputs.version }}
           body: |
             ## Release v${{ steps.get_version.outputs.version }}
-            
+
             Automated release created from merged PR.
-            
+
             ### Changes
             See the merged PR for detailed changelog.
-            
+
             ### Installation
             ```bash
             pip install --upgrade nuvu-scan==${{ steps.get_version.outputs.version }}
@@ -120,14 +120,14 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Build package
         if: |
           ((github.event_name == 'push' && steps.check_version.outputs.should_release == 'true' && steps.check_tag.outputs.tag_exists == 'false') ||
            (github.event_name == 'workflow_dispatch' && steps.check_tag.outputs.tag_exists == 'false'))
         run: |
           uv build
-      
+
       - name: Publish to PyPI
         if: |
           ((github.event_name == 'push' && steps.check_version.outputs.should_release == 'true' && steps.check_tag.outputs.tag_exists == 'false') ||
@@ -136,7 +136,7 @@ jobs:
         with:
           packages-dir: dist/
           print-hash: true
-      
+
       - name: Summary
         if: always()
         run: |

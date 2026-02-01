@@ -43,6 +43,15 @@ from ..formatters.json import JSONFormatter
     help="Cloud provider region(s) to scan (can be specified multiple times, default: all regions)",
 )
 @click.option(
+    "--collectors",
+    "-c",
+    multiple=True,
+    help="Specific collector(s) to run (can be specified multiple times). "
+    "AWS: s3, glue, athena, redshift, iam, mwaa. "
+    "GCP: gcs, bigquery, dataproc, pubsub, iam, gemini. "
+    "Default: all collectors.",
+)
+@click.option(
     "--access-key-id",
     envvar="AWS_ACCESS_KEY_ID",
     help="AWS access key ID (default: from AWS_ACCESS_KEY_ID env var)",
@@ -103,11 +112,17 @@ from ..formatters.json import JSONFormatter
     envvar="NUVU_API_KEY",
     help="Nuvu Cloud API key (from dashboard account settings)",
 )
+@click.option(
+    "--list-collectors",
+    is_flag=True,
+    help="List available collectors for the specified provider and exit",
+)
 def scan_command(
     provider: str,
     output_format: str,
     output_file: str | None,
     region: tuple,
+    collectors: tuple,
     access_key_id: str | None,
     secret_access_key: str | None,
     session_token: str | None,
@@ -121,8 +136,24 @@ def scan_command(
     push: bool,
     nuvu_cloud_url: str | None,
     api_key: str | None,
+    list_collectors: bool,
 ):
     """Scan cloud provider for data assets."""
+
+    # Handle --list-collectors flag
+    if list_collectors:
+        if provider == "aws":
+            available = AWSScanner.get_available_collectors()
+        elif provider == "gcp":
+            available = GCPScanner.get_available_collectors()
+        else:
+            click.echo(f"Unknown provider: {provider}", err=True)
+            sys.exit(1)
+
+        click.echo(f"Available collectors for {provider.upper()}:")
+        for name in sorted(available):
+            click.echo(f"  - {name}")
+        return
 
     # Build credentials based on provider
     credentials = {}
@@ -206,6 +237,7 @@ def scan_command(
         credentials=credentials,
         regions=list(region) if region else None,
         account_id=account_id,
+        collectors=list(collectors) if collectors else None,
     )
 
     # Get scanner instance

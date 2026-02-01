@@ -177,7 +177,7 @@ class AWSScanner(CloudProviderScan):
                 region_name=credentials.get("region", "us-east-1"),
             )
         except ClientError as e:
-            raise ValueError(f"Failed to assume role {role_arn}: {str(e)}")
+            raise ValueError(f"Failed to assume role {role_arn}: {str(e)}") from e
 
     def _resolve_regions(self) -> list[str]:
         """Resolve regions to scan. If none provided, scan all enabled regions."""
@@ -201,23 +201,49 @@ class AWSScanner(CloudProviderScan):
             # If we can't get account ID, return "unknown"
             return "unknown"
 
+    # Map of collector names to their classes for filtering
+    COLLECTOR_MAP = {
+        "s3": S3Collector,
+        "glue": GlueCollector,
+        "athena": AthenaCollector,
+        "redshift": RedshiftCollector,
+        "iam": IAMCollector,
+        "mwaa": MWAACollector,
+    }
+
+    @classmethod
+    def get_available_collectors(cls) -> list[str]:
+        """Return list of available collector names."""
+        return list(cls.COLLECTOR_MAP.keys())
+
     def _initialize_collectors(self) -> list:
-        """Initialize all AWS service collectors."""
+        """Initialize AWS service collectors based on config."""
         collectors = []
 
-        # Initialize collectors for each service
-        collectors.append(S3Collector(self.session, self.config.regions))
-        collectors.append(GlueCollector(self.session, self.config.regions))
-        collectors.append(AthenaCollector(self.session, self.config.regions))
-        collectors.append(RedshiftCollector(self.session, self.config.regions))
-        collectors.append(IAMCollector(self.session, self.config.regions))
-        collectors.append(MWAACollector(self.session, self.config.regions))
+        # Get requested collectors from config
+        requested = self.config.collectors if self.config.collectors else []
 
-        # TODO: Add more collectors as needed
-        # collectors.append(OpenSearchCollector(self.session, self.config.regions))
-        # collectors.append(EMRCollector(self.session, self.config.regions))
-        # collectors.append(SageMakerCollector(self.session, self.config.regions))
-        # etc.
+        # Normalize to lowercase
+        requested_lower = [c.lower() for c in requested]
+
+        # If no specific collectors requested, use all
+        if not requested_lower:
+            for collector_cls in self.COLLECTOR_MAP.values():
+                collectors.append(collector_cls(self.session, self.config.regions))
+        else:
+            # Filter to only requested collectors
+            for name, collector_cls in self.COLLECTOR_MAP.items():
+                if name in requested_lower:
+                    collectors.append(collector_cls(self.session, self.config.regions))
+
+            # Warn about unknown collectors
+            known = set(self.COLLECTOR_MAP.keys())
+            unknown = set(requested_lower) - known
+            if unknown:
+                import sys
+
+                print(f"Warning: Unknown collectors ignored: {', '.join(unknown)}", file=sys.stderr)
+                print(f"Available collectors: {', '.join(sorted(known))}", file=sys.stderr)
 
         return collectors
 
@@ -264,7 +290,7 @@ class AWSScanner(CloudProviderScan):
                 cost_summary_asset = Asset(
                     provider="aws",
                     asset_type="cost_summary",
-                    normalized_category=NormalizedCategory.SECURITY,  # Using security as placeholder
+                    normalized_category=NormalizedCategory.BILLING,
                     service="Cost Explorer",
                     region="global",
                     arn="arn:aws:ce::cost-summary",

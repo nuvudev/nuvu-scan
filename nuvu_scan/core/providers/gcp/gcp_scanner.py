@@ -50,11 +50,11 @@ class GCPScanner(CloudProviderScan):
         try:
             creds, _ = default()
             return creds
-        except DefaultCredentialsError:
+        except DefaultCredentialsError as e:
             raise ValueError(
                 "GCP credentials not found. Provide service_account_key_file, "
                 "service_account_key_json, or set GOOGLE_APPLICATION_CREDENTIALS"
-            )
+            ) from e
 
     def _get_project_id(self) -> str:
         """Get GCP project ID from credentials or config."""
@@ -72,17 +72,49 @@ class GCPScanner(CloudProviderScan):
 
         raise ValueError("GCP project_id is required. Set it in credentials or use --gcp-project")
 
+    # Map of collector names to their classes for filtering
+    COLLECTOR_MAP = {
+        "gcs": GCSCollector,
+        "bigquery": BigQueryCollector,
+        "dataproc": DataprocCollector,
+        "pubsub": PubSubCollector,
+        "iam": IAMCollector,
+        "gemini": GeminiCollector,
+    }
+
+    @classmethod
+    def get_available_collectors(cls) -> list[str]:
+        """Return list of available collector names."""
+        return list(cls.COLLECTOR_MAP.keys())
+
     def _initialize_collectors(self) -> list:
-        """Initialize all GCP service collectors."""
+        """Initialize GCP service collectors based on config."""
         collectors = []
 
-        # Initialize collectors for each service
-        collectors.append(GCSCollector(self.credentials, self.project_id))
-        collectors.append(BigQueryCollector(self.credentials, self.project_id))
-        collectors.append(DataprocCollector(self.credentials, self.project_id))
-        collectors.append(PubSubCollector(self.credentials, self.project_id))
-        collectors.append(IAMCollector(self.credentials, self.project_id))
-        collectors.append(GeminiCollector(self.credentials, self.project_id))
+        # Get requested collectors from config
+        requested = self.config.collectors if self.config.collectors else []
+
+        # Normalize to lowercase
+        requested_lower = [c.lower() for c in requested]
+
+        # If no specific collectors requested, use all
+        if not requested_lower:
+            for collector_cls in self.COLLECTOR_MAP.values():
+                collectors.append(collector_cls(self.credentials, self.project_id))
+        else:
+            # Filter to only requested collectors
+            for name, collector_cls in self.COLLECTOR_MAP.items():
+                if name in requested_lower:
+                    collectors.append(collector_cls(self.credentials, self.project_id))
+
+            # Warn about unknown collectors
+            known = set(self.COLLECTOR_MAP.keys())
+            unknown = set(requested_lower) - known
+            if unknown:
+                import sys
+
+                print(f"Warning: Unknown collectors ignored: {', '.join(unknown)}", file=sys.stderr)
+                print(f"Available collectors: {', '.join(sorted(known))}", file=sys.stderr)
 
         return collectors
 
