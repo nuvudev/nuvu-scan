@@ -220,7 +220,10 @@ class RedshiftCollector:
                     maintenance_window = cluster.get("PreferredMaintenanceWindow", "")
 
                     # Estimate cost based on node type and count
-                    monthly_cost = self._estimate_cluster_cost(node_type, node_count)
+                    # Pass reservation status to avoid double-counting with reserved nodes
+                    monthly_cost = self._estimate_cluster_cost(
+                        node_type, node_count, reservation_status["covered"]
+                    )
 
                     # Calculate potential savings from reservation
                     potential_reservation_savings = 0.0
@@ -587,9 +590,25 @@ class RedshiftCollector:
 
         return assets
 
-    def _estimate_cluster_cost(self, node_type: str, node_count: int) -> float:
-        """Estimate monthly cost for Redshift cluster."""
-        # Redshift pricing (approximate, as of 2024-2025)
+    def _estimate_cluster_cost(
+        self, node_type: str, node_count: int, has_reservation: bool = False
+    ) -> float:
+        """Estimate monthly cost for Redshift cluster.
+
+        Note: These are on-demand list prices. Actual costs depend on:
+        - Reserved Node pricing (30-75% discount)
+        - Savings Plans coverage
+        - Actual usage patterns
+
+        We set cost_estimate_usd=0 for reserved clusters to avoid double-counting
+        with reserved node costs in Cost Explorer actual data.
+        """
+        # If covered by reservation, don't estimate - actual cost is in Cost Explorer
+        if has_reservation:
+            return 0.0  # Actual cost comes from Cost Explorer, avoid double-counting
+
+        # Redshift on-demand pricing (approximate, as of 2024-2025)
+        # Note: These are list prices; most production clusters use reserved pricing
         pricing = {
             "dc2.large": 180.0,
             "dc2.8xlarge": 1440.0,
@@ -1215,6 +1234,10 @@ class RedshiftCollector:
                     if state != "active":
                         risk_flags.append(f"reservation_{state}")
 
+                    # Note: Reserved node costs are NOT added to total estimate
+                    # because the actual cost is already included in Cost Explorer data.
+                    # We display as $0 to avoid double-counting.
+                    # The usage_metrics still contain the cost info for reporting purposes.
                     assets.append(
                         Asset(
                             provider="aws",
@@ -1226,7 +1249,7 @@ class RedshiftCollector:
                             name=f"{node_type} x{node_count} ({offering_type})",
                             created_at=start_time.isoformat() if start_time else None,
                             risk_flags=risk_flags,
-                            cost_estimate_usd=annual_cost / 12,  # Monthly equivalent
+                            cost_estimate_usd=0.0,  # Set to 0 - actual cost in Cost Explorer
                             usage_metrics={
                                 "reserved_node_id": node_id,
                                 "node_type": node_type,
