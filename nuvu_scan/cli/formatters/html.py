@@ -135,8 +135,8 @@ class HTMLFormatter:
 
         <h2>📋 Scan Scope</h2>
         <div class="insight-box info">
-            <p><strong>Collectors:</strong> {', '.join(result.scanned_collectors) if result.scanned_collectors else 'All (Full Scan)'}</p>
-            <p><strong>Regions:</strong> {', '.join(result.scanned_regions[:10]) if result.scanned_regions else 'All enabled regions'}{' (+ ' + str(len(result.scanned_regions) - 10) + ' more)' if len(result.scanned_regions) > 10 else ''}</p>
+            <p><strong>Collectors:</strong> {", ".join(result.scanned_collectors) if result.scanned_collectors else "All (Full Scan)"}</p>
+            <p><strong>Regions:</strong> {", ".join(result.scanned_regions[:10]) if result.scanned_regions else "All enabled regions"}{" (+ " + str(len(result.scanned_regions) - 10) + " more)" if len(result.scanned_regions) > 10 else ""}</p>
         </div>
 
         <h2>Executive Summary</h2>

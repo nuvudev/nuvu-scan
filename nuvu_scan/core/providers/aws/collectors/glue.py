@@ -294,7 +294,7 @@ class GlueCollector:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
             if error_code == "AccessDeniedException":
                 print(
-                    "  ⚠️  No permission to list Glue jobs. " "Add 'glue:GetJobs' to IAM policy.",
+                    "  ⚠️  No permission to list Glue jobs. Add 'glue:GetJobs' to IAM policy.",
                     file=sys.stderr,
                 )
             else:
