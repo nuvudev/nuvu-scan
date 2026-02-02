@@ -31,28 +31,6 @@ pip install nuvu-scan
 
 ## Usage
 
-### Optional: Push results to Nuvu Cloud
-
-Nuvu Scan is fully open-source and runs standalone — no account required.
-If you want dashboards, team workflows, and long‑term history, you can optionally push results to Nuvu Cloud.
-
-```bash
-# Push results to Nuvu Cloud (optional)
-nuvu scan --provider aws --push --api-key your_nuvu_api_key
-
-# Or use environment variable
-export NUVU_API_KEY=your_nuvu_api_key
-nuvu scan --provider aws --push
-
-# Custom cloud URL (defaults to https://nuvu.dev)
-nuvu scan --provider aws --push --nuvu-cloud-url https://nuvu.dev
-```
-
-What this means for open‑source users:
-- You can keep everything local and export JSON/CSV/HTML.
-- No cloud credentials are ever sent to Nuvu Cloud — only scan results.
-- The data collected is identical whether you run locally or push.
-
 ### AWS Scanning
 
 **Prerequisites:** Create an IAM user or role with the read-only policy from `aws-iam-policy.json`. See the [AWS Setup](#aws-v1---available-now) section below for detailed instructions.
@@ -315,6 +293,29 @@ Nuvu requires read-only access to your GCP project via a Service Account. The to
 
 ### Azure, Databricks (Coming Soon)
 Multi-cloud support is built into the architecture. Additional providers will be added in future releases.
+
+### Optional: Push results to Nuvu Cloud
+
+Nuvu Scan is fully open-source and runs standalone — no account required.
+If you want dashboards, team workflows, data estate time travel and long‑term history, you can optionally push results to Nuvu Cloud.
+
+```bash
+# Push results to Nuvu Cloud (optional)
+nuvu scan --provider aws --push --api-key your_nuvu_api_key
+
+# Or use environment variable
+export NUVU_API_KEY=your_nuvu_api_key
+nuvu scan --provider aws --push
+
+# Custom cloud URL (defaults to https://nuvu.dev)
+nuvu scan --provider aws --push --nuvu-cloud-url https://nuvu.dev
+```
+
+What this means for open‑source users:
+- You can keep everything local and export JSON/CSV/HTML.
+- No cloud credentials are ever sent to Nuvu Cloud — only scan results.
+- The data collected is identical whether you run locally or push.
+
 
 ## License
 
