@@ -311,23 +311,64 @@ class HTMLFormatter:
         </div>
             """
 
-        # Reserved nodes analysis
+        # Reserved nodes analysis - compare with provisioned clusters
         if reserved_nodes:
             active_reservations = [
                 a for a in reserved_nodes if (a.usage_metrics or {}).get("state") == "active"
             ]
-            expired = [a for a in reserved_nodes if "reservation_expired" in (a.risk_flags or [])]
+
+            # Count total nodes covered by active reservations
+            active_reserved_nodes = sum(
+                (a.usage_metrics or {}).get("node_count", 0) for a in active_reservations
+            )
+
+            # Count total provisioned cluster nodes
+            clusters = [a for a in assets if a.asset_type == "redshift_cluster"]
+            total_provisioned_nodes = sum(
+                (a.usage_metrics or {}).get("node_count", 0) for a in clusters
+            )
+
+            # Calculate uncovered nodes (potential savings opportunity)
+            uncovered_nodes = max(0, total_provisioned_nodes - active_reserved_nodes)
+
+            # Determine if this is a savings opportunity
+            is_savings_opportunity = uncovered_nodes > 0
+            box_class = "warning" if is_savings_opportunity else "info"
 
             html += f"""
-        <div class="insight-box info">
-            <h3>🎫 Reserved Nodes ({len(reserved_nodes)} total)</h3>
+        <div class="insight-box {box_class}">
+            <h3>🎫 Reserved vs On-Demand Nodes</h3>
             <ul>
-                <li><strong>Active Reservations:</strong> {len(active_reservations)}</li>
-                <li><strong>Expired/Retired:</strong> {len(expired)}</li>
-                <li><strong>Expiring Soon:</strong> {len(expiring_reservations)}</li>
+                <li><strong>Provisioned Cluster Nodes:</strong> {total_provisioned_nodes}</li>
+                <li><strong>Active Reserved Nodes:</strong> {active_reserved_nodes} ({len(active_reservations)} reservations)</li>
+                <li><strong>Uncovered (On-Demand) Nodes:</strong> {uncovered_nodes}</li>
             </ul>
-        </div>
             """
+
+            if is_savings_opportunity:
+                # Estimate savings: reserved pricing saves ~30-40% on average
+                # Rough estimate: $500/node/month on-demand vs $300/node/month reserved
+                estimated_monthly_savings = (
+                    uncovered_nodes * 200
+                )  # Conservative $200/node/month savings
+                html += f"""
+            <p class="recommendation">💰 <strong>Potential Savings:</strong> {uncovered_nodes} nodes running on-demand pricing. Consider purchasing reserved nodes to save ~${estimated_monthly_savings:,.0f}/month (estimated 30-40% discount).</p>
+            """
+            else:
+                html += """
+            <p class="recommendation">✅ All provisioned nodes are covered by reservations.</p>
+            """
+
+            # Show expiring reservations if any
+            if expiring_reservations:
+                expiring_nodes = sum(
+                    (a.usage_metrics or {}).get("node_count", 0) for a in expiring_reservations
+                )
+                html += f"""
+            <p class="recommendation">⚠️ <strong>{len(expiring_reservations)} reservations ({expiring_nodes} nodes) expiring soon.</strong> Plan for renewal to maintain coverage.</p>
+            """
+
+            html += "</div>"
 
         return html
 
