@@ -91,8 +91,8 @@ class MWAACollector:
                                 environment_class, min_workers, max_workers
                             )
 
-                            # Check for risk flags
-                            risk_flags = self._check_risks(environment, tags)
+                            # Check for risk flags (pass ownership for proper no_owner detection)
+                            risk_flags = self._check_risks(environment, tags, ownership)
 
                             # Create asset
                             asset = Asset(
@@ -251,7 +251,9 @@ class MWAACollector:
 
         return base_monthly + worker_monthly
 
-    def _check_risks(self, environment: dict, tags: dict[str, str]) -> list[str]:
+    def _check_risks(
+        self, environment: dict, tags: dict[str, str], ownership: dict | None = None
+    ) -> list[str]:
         """Check for risk flags in MWAA environment."""
         risks = []
 
@@ -260,8 +262,11 @@ class MWAACollector:
         if status in ["CREATING", "DELETING", "UPDATING"]:
             risks.append("environment_in_transition")
 
-        # Check for missing owner
-        if not tags.get("owner") and not tags.get("Owner"):
+        # Check for missing owner - only flag if we couldn't infer owner at all
+        if ownership:
+            if not ownership.get("owner") and ownership.get("confidence") == "unknown":
+                risks.append("no_owner")
+        elif not tags.get("owner") and not tags.get("Owner"):
             risks.append("no_owner")
 
         # Check for public access (if webserver is publicly accessible)

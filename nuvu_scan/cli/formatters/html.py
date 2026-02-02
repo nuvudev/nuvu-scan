@@ -179,7 +179,8 @@ class HTMLFormatter:
 
         for asset in sorted_assets:
             owner_class = ""
-            if asset.ownership_confidence == "unknown":
+            # Only show no-owner class if we have no suggested owner at all
+            if not asset.suggested_owner and asset.ownership_confidence == "unknown":
                 owner_class = "no-owner"
 
             risk_flags_html = ""

@@ -258,7 +258,20 @@ class RedshiftCollector:
                     )
 
             except ClientError as e:
-                print(f"Error collecting Redshift clusters in {region}: {e}")
+                import sys
+
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                if error_code == "AccessDeniedException":
+                    print(
+                        f"  ⚠️  No permission to describe Redshift clusters in {region}. "
+                        f"Add 'redshift:DescribeClusters' to IAM policy.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"  ⚠️  Error collecting Redshift clusters in {region}: {e}",
+                        file=sys.stderr,
+                    )
 
         return assets
 
@@ -374,7 +387,20 @@ class RedshiftCollector:
                         )
 
             except ClientError as e:
-                print(f"Error collecting Redshift Serverless in {region}: {e}")
+                import sys
+
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
+                if error_code == "AccessDeniedException":
+                    print(
+                        f"  ⚠️  No permission to list Redshift Serverless in {region}. "
+                        f"Add 'redshift-serverless:ListNamespaces' to IAM policy.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"  ⚠️  Error collecting Redshift Serverless in {region}: {e}",
+                        file=sys.stderr,
+                    )
 
         return assets
 

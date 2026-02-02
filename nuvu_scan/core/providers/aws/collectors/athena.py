@@ -79,7 +79,17 @@ class AthenaCollector:
                     continue
 
         except ClientError as e:
-            print(f"Error collecting Athena resources: {e}")
+            import sys
+
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "AccessDeniedException":
+                print(
+                    "  ⚠️  No permission to list Athena workgroups. "
+                    "Add 'athena:ListWorkGroups' to IAM policy.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"  ⚠️  Error collecting Athena resources: {e}", file=sys.stderr)
 
         return assets
 

@@ -152,7 +152,17 @@ class GlueCollector:
                     )
 
         except ClientError as e:
-            print(f"Error collecting Glue crawlers: {e}")
+            import sys
+
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "AccessDeniedException":
+                print(
+                    "  ⚠️  No permission to list Glue crawlers. "
+                    "Add 'glue:GetCrawlers' to IAM policy.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"  ⚠️  Error collecting Glue crawlers: {e}", file=sys.stderr)
 
         return assets
 
@@ -248,7 +258,16 @@ class GlueCollector:
                     )
 
         except ClientError as e:
-            print(f"Error collecting Glue jobs: {e}")
+            import sys
+
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "AccessDeniedException":
+                print(
+                    "  ⚠️  No permission to list Glue jobs. " "Add 'glue:GetJobs' to IAM policy.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"  ⚠️  Error collecting Glue jobs: {e}", file=sys.stderr)
 
         return assets
 
@@ -307,7 +326,17 @@ class GlueCollector:
                 )
 
         except ClientError as e:
-            print(f"Error collecting Glue connections: {e}")
+            import sys
+
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "AccessDeniedException":
+                print(
+                    "  ⚠️  No permission to list Glue connections. "
+                    "Add 'glue:GetConnections' to IAM policy.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"  ⚠️  Error collecting Glue connections: {e}", file=sys.stderr)
 
         return assets
 
@@ -452,7 +481,17 @@ class GlueCollector:
                         pass
 
         except ClientError as e:
-            print(f"Error collecting Glue resources: {e}")
+            import sys
+
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code == "AccessDeniedException":
+                print(
+                    "  ⚠️  No permission to list Glue databases/tables. "
+                    "Add 'glue:GetDatabases' and 'glue:GetTables' to IAM policy.",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"  ⚠️  Error collecting Glue resources: {e}", file=sys.stderr)
 
         return assets
 
