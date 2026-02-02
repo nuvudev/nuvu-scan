@@ -56,7 +56,7 @@
 
 #### Redshift Collector (Major Enhancement in v2.0.0)
 - ✅ **Provisioned Clusters** (Enhanced)
-  - Lists all clusters with detailed metrics
+  - Lists all clusters across ALL regions (auto-discovery)
   - Node type, count, encryption status
   - CloudWatch-based activity tracking (DatabaseConnections, CPUUtilization)
   - Cluster age calculation
@@ -64,11 +64,22 @@
   - **Reservation coverage analysis** - checks if covered by reserved nodes
   - **WLM configuration analysis** - queue count, auto WLM, unlimited queues
   - Potential reservation savings calculation (40% estimate)
-  - Risk flags: `publicly_accessible`, `unencrypted`, `low_activity`, `potentially_unused`, `no_reservation_long_running`, `default_wlm_only`, `unlimited_wlm_queue`
-- ✅ **Redshift Serverless**
+  - **Performance metrics from CloudWatch** (NEW)
+    - CPU utilization max/avg (24h)
+    - Queries completed (24h)
+    - Disk space usage percentage
+    - Query duration and queue time
+    - Performance recommendations (right-sizing)
+  - Risk flags: `publicly_accessible`, `unencrypted`, `low_activity`, `potentially_unused`, `no_reservation_long_running`, `default_wlm_only`, `unlimited_wlm_queue`, `low_cpu_utilization`
+- ✅ **Redshift Serverless** (Enhanced)
   - Namespaces with encryption status
   - Workgroups with base capacity and cost estimation
-  - Risk flags: `publicly_accessible`
+  - **RPU utilization metrics from CloudWatch** (NEW)
+    - RPU max/avg (24h and 7d)
+    - Queries completed/failed (24h)
+    - Query duration metrics
+    - Utilization recommendations for capacity right-sizing
+  - Risk flags: `publicly_accessible`, `low_rpu_utilization`, `high_query_failure_rate`
 - ✅ **Redshift Datashares** (NEW)
   - Lists all datashares (inbound and outbound)
   - Consumer account identification
@@ -175,6 +186,7 @@
 - ✅ **Progress Logging** - Real-time status updates during collection
 
 ### Enhanced HTML Reports (v2.0.0)
+- ✅ **Scan Scope Section** (NEW) - Shows which collectors and regions were scanned
 - ✅ **Executive Summary** with key metrics
 - ✅ **Cost Optimization Section**
   - Snapshot cost analysis with old snapshot flagging
@@ -184,8 +196,11 @@
   - Stale/unused crawlers and ETL jobs
   - Cross-account data sharing alerts
   - WLM configuration review
+  - **Cluster Performance table** (NEW) - CPU, queries, disk, recommendations
+  - **Serverless Workgroup Utilization table** (NEW) - RPU metrics, recommendations
 - ✅ Improved styling with insight boxes (warning, alert, info)
 - ✅ Potential savings card in summary
+- ✅ **Footer with nuvu-scan attribution** and GitHub repository link
 
 ### New Asset Categories (v2.0.0)
 - ✅ `DATA_PIPELINE` - ETL jobs, crawlers, workflows
@@ -223,6 +238,9 @@
 | Redshift | `reservation_expiring_soon` | Reserved node expires within 30 days |
 | Redshift | `default_wlm_only` | Cluster using only default WLM queue |
 | Redshift | `unlimited_wlm_queue` | WLM queue with no concurrency limit |
+| Redshift | `low_cpu_utilization` | Cluster CPU never exceeds 20% (right-sizing opportunity) |
+| Redshift Serverless | `low_rpu_utilization` | RPU usage below 50% of base capacity |
+| Redshift Serverless | `high_query_failure_rate` | >10% of queries failing |
 
 ### Cost Tracking & Reporting
 - ✅ Asset-level cost estimation for all resources
