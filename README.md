@@ -50,11 +50,14 @@ nuvu scan --provider aws \
   --access-key-id your-key \
   --secret-access-key your-secret
 
-# Output to JSON
-nuvu scan --provider aws --output-format json --output-file report.json
+# Output to HTML/JSON/CSV
+nuvu scan --provider aws --output-format html --output-file report.json
 
 # Scan specific regions
 nuvu scan --provider aws --region us-east-1 --region eu-west-1
+
+# Scan specific collector
+nuvu scan --provider aws --output-format html --collectors redshift --region us-west-1
 ```
 
 #### 2. Access Key + Secret Key + Session Token (Temporary Credentials)
@@ -133,6 +136,10 @@ You can optionally push scan results to a remote API for centralized tracking:
 ```bash
 # Push results to a remote endpoint
 nuvu scan --provider aws --push --api-key your-api-key --api-url https://your-api.example.com
+
+# Push results to NUVU Cloud for Data Goverance layer
+nuvu scan --provider aws --push --api-key your-api-key
+
 ```
 
 This is useful for integrating with your own data governance platforms or CI/CD pipelines.
