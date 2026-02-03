@@ -32,10 +32,12 @@ class HTMLFormatter:
             </div>
             """
         else:
+            # Fallback when Cost Explorer data not available
             summary_cards += f"""
             <div class="summary-card">
-                <h3>Estimated Monthly Cost</h3>
+                <h3>Monthly Cost</h3>
                 <div class="value">${result.total_cost_estimate_usd:,.2f}</div>
+                <div class="card-note">Add Cost Explorer permissions for accurate data</div>
             </div>
             """
 
@@ -365,13 +367,9 @@ class HTMLFormatter:
             """
 
             if is_savings_opportunity:
-                # Estimate savings: reserved pricing saves ~30-40% on average
-                # Rough estimate: $500/node/month on-demand vs $300/node/month reserved
-                estimated_monthly_savings = (
-                    uncovered_nodes * 200
-                )  # Conservative $200/node/month savings
+                # Reserved pricing typically saves 30-40% vs on-demand
                 html += f"""
-            <p class="recommendation">💰 <strong>Potential Savings:</strong> {uncovered_nodes} nodes running on-demand pricing. Consider purchasing reserved nodes to save ~${estimated_monthly_savings:,.0f}/month (estimated 30-40% discount).</p>
+            <p class="recommendation">💰 <strong>Potential Savings:</strong> {uncovered_nodes} nodes running on-demand pricing. Reserved nodes typically offer 30-40% discount.</p>
             """
             else:
                 html += """
