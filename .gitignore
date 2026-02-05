@@ -61,6 +61,9 @@ test-scan*.html
 *.json
 !tests/**/*.json
 
+# Raw scan data (contains sensitive AWS data)
+raws/
+
 # Environment variables
 .env
 .env.local

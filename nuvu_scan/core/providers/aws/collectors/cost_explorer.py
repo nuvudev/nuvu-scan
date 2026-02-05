@@ -176,3 +176,93 @@ class CostExplorerCollector:
 
         # Return the actual 30-day cost
         return total_cost
+
+    def get_savings_plans_summary(self, start_date: datetime, end_date: datetime) -> dict:
+        """Get Savings Plans summary including utilization and coverage.
+
+        Returns savings from active Savings Plans.
+        """
+        summary = {
+            "total_savings": 0.0,
+            "utilization_percent": 0.0,
+            "coverage_percent": 0.0,
+            "plans": [],
+        }
+
+        try:
+            # Get Savings Plans utilization
+            util_response = self.cost_explorer_client.get_savings_plans_utilization(
+                TimePeriod={
+                    "Start": start_date.strftime("%Y-%m-%d"),
+                    "End": end_date.strftime("%Y-%m-%d"),
+                },
+            )
+
+            total_util = util_response.get("Total", {})
+            utilization = total_util.get("Utilization", {})
+            summary["utilization_percent"] = float(utilization.get("UtilizationPercentage", 0))
+
+            # Calculate savings from commitment vs on-demand
+            amortized = float(
+                total_util.get("AmortizedCommitment", {}).get("TotalAmortizedCommitment", 0)
+            )
+            on_demand = float(total_util.get("Savings", {}).get("OnDemandCostEquivalent", 0))
+            net_savings = float(total_util.get("Savings", {}).get("NetSavings", 0))
+
+            summary["total_savings"] = net_savings
+            summary["amortized_commitment"] = amortized
+            summary["on_demand_equivalent"] = on_demand
+
+        except ClientError as e:
+            if "AccessDenied" not in str(e):
+                import sys
+
+                print(f"WARNING: Could not get Savings Plans utilization: {e}", file=sys.stderr)
+        except Exception as e:
+            import sys
+
+            print(f"INFO: Savings Plans data not available: {e}", file=sys.stderr)
+
+        try:
+            # Get Savings Plans coverage
+            coverage_response = self.cost_explorer_client.get_savings_plans_coverage(
+                TimePeriod={
+                    "Start": start_date.strftime("%Y-%m-%d"),
+                    "End": end_date.strftime("%Y-%m-%d"),
+                },
+            )
+
+            total_coverage = coverage_response.get("Total", {})
+            coverage = total_coverage.get("Coverage", {})
+            summary["coverage_percent"] = float(coverage.get("CoveragePercentage", 0))
+
+        except ClientError:
+            pass  # Coverage might not be available
+        except Exception:
+            pass
+
+        return summary
+
+    def get_all_costs_with_savings(self, start_date: datetime, end_date: datetime) -> dict:
+        """Get comprehensive cost breakdown including all services and Savings Plans.
+
+        Returns:
+            dict with:
+            - service_costs: Dict of service name to cost
+            - savings_plans: Savings Plans summary
+            - total_cost: Total cost across all services
+        """
+        result = {
+            "service_costs": {},
+            "savings_plans": {},
+            "total_cost": 0.0,
+        }
+
+        # Get all service costs
+        result["service_costs"] = self.get_service_costs(start_date, end_date)
+        result["total_cost"] = sum(result["service_costs"].values())
+
+        # Get Savings Plans summary
+        result["savings_plans"] = self.get_savings_plans_summary(start_date, end_date)
+
+        return result

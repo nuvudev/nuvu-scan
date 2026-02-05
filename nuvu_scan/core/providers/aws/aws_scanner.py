@@ -15,15 +15,37 @@ from nuvu_scan.core.base import (
     ScanConfig,
 )
 
+from .collectors.apigateway import APIGatewayCollector
 from .collectors.athena import AthenaCollector
+from .collectors.backup import BackupCollector
+from .collectors.cloudfront import CloudFrontCollector
+from .collectors.cloudtrail import CloudTrailCollector
+from .collectors.cloudwatch import CloudWatchLogsCollector
 from .collectors.cost_explorer import CostExplorerCollector
+from .collectors.dynamodb import DynamoDBCollector
+from .collectors.ec2 import EC2Collector
+from .collectors.ecs import ECSCollector
+from .collectors.eks import EKSCollector
+from .collectors.elasticache import ElastiCacheCollector
+from .collectors.elb import ELBCollector
 from .collectors.glue import GlueCollector
 from .collectors.iam import IAMCollector
+from .collectors.kinesis import KinesisFirehoseCollector
+from .collectors.kms import KMSCollector
+from .collectors.lakeformation import LakeFormationCollector
+from .collectors.lambda_collector import LambdaCollector
+from .collectors.misc_services import EFSCollector, StepFunctionsCollector, SystemsManagerCollector
 from .collectors.mwaa import MWAACollector
+from .collectors.rds import RDSCollector
 from .collectors.redshift import RedshiftCollector
-
-# Import collectors
+from .collectors.route53 import Route53Collector
 from .collectors.s3 import S3Collector
+from .collectors.secrets import SecretsManagerCollector
+from .collectors.security_services import SecurityServicesCollector
+from .collectors.sns_sqs import SNSSQSCollector
+
+# New collectors for comprehensive coverage
+from .collectors.vpc_costs import VPCCostsCollector
 
 
 class AWSScanner(CloudProviderScan):
@@ -166,18 +188,60 @@ class AWSScanner(CloudProviderScan):
 
     # Map of collector names to their classes for filtering
     COLLECTOR_MAP = {
+        # Original collectors
         "s3": S3Collector,
         "glue": GlueCollector,
         "athena": AthenaCollector,
         "redshift": RedshiftCollector,
         "iam": IAMCollector,
         "mwaa": MWAACollector,
+        "ec2": EC2Collector,
+        "kms": KMSCollector,
+        "rds": RDSCollector,
+        "dynamodb": DynamoDBCollector,
+        "lambda": LambdaCollector,
+        "secrets": SecretsManagerCollector,
+        "backup": BackupCollector,
+        "eks": EKSCollector,
+        "sns_sqs": SNSSQSCollector,
+        "lakeformation": LakeFormationCollector,
+        "cloudtrail": CloudTrailCollector,
+        "cloudwatch": CloudWatchLogsCollector,
+        # New collectors for comprehensive coverage
+        "vpc_costs": VPCCostsCollector,
+        "elb": ELBCollector,
+        "elasticache": ElastiCacheCollector,
+        "route53": Route53Collector,
+        "kinesis": KinesisFirehoseCollector,
+        "apigateway": APIGatewayCollector,
+        "cloudfront": CloudFrontCollector,
+        "ecs": ECSCollector,
+        "security": SecurityServicesCollector,
+        "ssm": SystemsManagerCollector,
+        "stepfunctions": StepFunctionsCollector,
+        "efs": EFSCollector,
     }
 
     @classmethod
     def get_available_collectors(cls) -> list[str]:
         """Return list of available collector names."""
         return list(cls.COLLECTOR_MAP.keys())
+
+    # Collectors that require account_id as a parameter
+    COLLECTORS_NEEDING_ACCOUNT_ID = {
+        "vpc_costs",
+        "elb",
+        "elasticache",
+        "route53",
+        "kinesis",
+        "apigateway",
+        "cloudfront",
+        "ecs",
+        "security",
+        "ssm",
+        "stepfunctions",
+        "efs",
+    }
 
     def _initialize_collectors(self) -> list:
         """Initialize AWS service collectors based on config."""
@@ -189,15 +253,22 @@ class AWSScanner(CloudProviderScan):
         # Normalize to lowercase
         requested_lower = [c.lower() for c in requested]
 
+        def create_collector(name, collector_cls):
+            """Create a collector with appropriate parameters."""
+            if name in self.COLLECTORS_NEEDING_ACCOUNT_ID:
+                return collector_cls(self.session, self.config.regions, self.config.account_id)
+            else:
+                return collector_cls(self.session, self.config.regions)
+
         # If no specific collectors requested, use all
         if not requested_lower:
-            for collector_cls in self.COLLECTOR_MAP.values():
-                collectors.append(collector_cls(self.session, self.config.regions))
+            for name, collector_cls in self.COLLECTOR_MAP.items():
+                collectors.append(create_collector(name, collector_cls))
         else:
             # Filter to only requested collectors
             for name, collector_cls in self.COLLECTOR_MAP.items():
                 if name in requested_lower:
-                    collectors.append(collector_cls(self.session, self.config.regions))
+                    collectors.append(create_collector(name, collector_cls))
 
             # Warn about unknown collectors
             known = set(self.COLLECTOR_MAP.keys())
@@ -243,18 +314,68 @@ class AWSScanner(CloudProviderScan):
 
             end_date = datetime.utcnow()
             start_date = end_date - timedelta(days=30)
-            service_costs = self.cost_explorer.get_service_costs(start_date, end_date)
+
+            # Get comprehensive cost data including Savings Plans
+            cost_data = self.cost_explorer.get_all_costs_with_savings(start_date, end_date)
+            service_costs = cost_data["service_costs"]
+            savings_plans = cost_data["savings_plans"]
             print("  → Cost data retrieved", file=sys.stderr)
+            if savings_plans.get("total_savings", 0) > 0:
+                print(
+                    f"  → Savings Plans: ${savings_plans['total_savings']:.2f} saved ({savings_plans['utilization_percent']:.1f}% utilization)",
+                    file=sys.stderr,
+                )
 
             if service_costs:
                 # Map collectors to AWS service names in Cost Explorer
                 collector_to_services = {
+                    # Original collectors
                     "s3": ["Amazon Simple Storage Service"],
                     "glue": ["AWS Glue"],
                     "athena": ["Amazon Athena"],
                     "redshift": ["Amazon Redshift"],
                     "iam": [],  # IAM is free
                     "mwaa": ["Amazon Managed Workflows for Apache Airflow"],
+                    "ec2": [
+                        "Amazon Elastic Compute Cloud - Compute",
+                        "EC2 - Other",
+                        "Amazon EC2 Container Registry (ECR)",
+                    ],
+                    "kms": ["AWS Key Management Service"],
+                    "rds": ["Amazon Relational Database Service"],
+                    "dynamodb": ["Amazon DynamoDB"],
+                    "lambda": ["AWS Lambda"],
+                    "secrets": ["AWS Secrets Manager"],
+                    "backup": ["AWS Backup"],
+                    "eks": [
+                        "Amazon Elastic Kubernetes Service",
+                        "Amazon Elastic Container Service for Kubernetes",
+                    ],
+                    "sns_sqs": [
+                        "Amazon Simple Notification Service",
+                        "Amazon Simple Queue Service",
+                    ],
+                    "lakeformation": ["AWS Lake Formation"],
+                    "cloudtrail": ["AWS CloudTrail"],
+                    "cloudwatch": ["AmazonCloudWatch", "CloudWatch Events"],
+                    # New collectors
+                    "vpc_costs": ["Amazon Virtual Private Cloud"],
+                    "elb": ["Amazon Elastic Load Balancing"],
+                    "elasticache": ["Amazon ElastiCache"],
+                    "route53": ["Amazon Route 53"],
+                    "kinesis": ["Amazon Kinesis Firehose", "Amazon Kinesis"],
+                    "apigateway": ["Amazon API Gateway"],
+                    "cloudfront": ["Amazon CloudFront"],
+                    "ecs": ["Amazon Elastic Container Service"],
+                    "security": [
+                        "Amazon GuardDuty",
+                        "Amazon Inspector",
+                        "AWS Security Hub",
+                        "AWS Config",
+                    ],
+                    "ssm": ["AWS Systems Manager"],
+                    "stepfunctions": ["AWS Step Functions"],
+                    "efs": ["Amazon Elastic File System"],
                 }
 
                 # Filter costs based on active collectors
@@ -309,6 +430,14 @@ class AWSScanner(CloudProviderScan):
                         "estimated_monthly_cost": monthly_estimate,
                         "scope": scope_note,
                         "note": "Actual costs from AWS Cost Explorer API for the last 30 days.",
+                        # Savings Plans data
+                        "savings_plans": {
+                            "total_savings": savings_plans.get("total_savings", 0),
+                            "utilization_percent": savings_plans.get("utilization_percent", 0),
+                            "coverage_percent": savings_plans.get("coverage_percent", 0),
+                            "amortized_commitment": savings_plans.get("amortized_commitment", 0),
+                            "on_demand_equivalent": savings_plans.get("on_demand_equivalent", 0),
+                        },
                     },
                 )
                 all_assets.append(cost_summary_asset)
