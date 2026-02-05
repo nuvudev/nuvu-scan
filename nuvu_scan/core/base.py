@@ -28,6 +28,16 @@ class NormalizedCategory(str, Enum):
     DATABASE = "database"
     SECURITY = "security"
     BILLING = "billing"
+    # Additional categories for comprehensive coverage
+    NETWORKING = "networking"  # VPC, Load Balancers, Route 53, CloudFront
+    CACHING = "caching"  # ElastiCache, DAX
+    CONTAINER = "container"  # ECS, ECR, Fargate
+    SERVERLESS = "serverless"  # Lambda, Step Functions, API Gateway
+    STORAGE = "storage"  # EBS, EFS, FSx
+    MESSAGING = "messaging"  # SNS, SQS, EventBridge
+    OBSERVABILITY = "observability"  # CloudWatch, X-Ray
+    RESILIENCE = "resilience"  # Backup, DR
+    GOVERNANCE = "governance"  # Config, CloudTrail, Organizations
 
 
 @dataclass

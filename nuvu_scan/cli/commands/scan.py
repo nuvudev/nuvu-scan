@@ -331,6 +331,7 @@ def scan_command(
                 "total_cost_estimate_usd": result.total_cost_estimate_usd,
                 "scan_regions": scan_regions if scan_regions else None,
                 "scan_all_regions": not bool(region),
+                "summary": result.summary,  # Include cost data from Cost Explorer
                 "assets": [
                     {
                         "provider": asset.provider,
@@ -353,6 +354,7 @@ def scan_command(
                         "risk_flags": asset.risk_flags,
                         "ownership_confidence": asset.ownership_confidence or "unknown",
                         "suggested_owner": asset.suggested_owner,
+                        "underlying_cloud_account_id": asset.underlying_cloud_account_id,
                     }
                     for asset in result.assets
                 ],
