@@ -239,10 +239,19 @@ class HTMLFormatter:
         </script>
 
         <div class="footer">
-            <p><strong>nuvu-scan</strong> — The Open Source Cloud Data Scanner</p>
+            <p><strong>nuvu-scan</strong> — Open Source Cloud Data Scanner</p>
             <p><a href="https://github.com/nuvudev/nuvu-scan" target="_blank">github.com/nuvudev/nuvu-scan</a></p>
-            <p style="margin-top: 12px; font-size: 11px; color: #888;">
-                Add the governance layer: <a href="https://nuvu.dev" style="color: #666;">Nuvu Cloud</a> — historical tracking • team dashboards • scheduled scans • Slack/email alerts
+            <p style="margin-top: 12px; font-size: 11px; color: #888; max-width: 500px; margin-left: auto; margin-right: auto;">
+                🔒 <strong>No data accessed.</strong> This scan collected only resource metadata (names, configs, tags, metrics) via read-only AWS APIs. Your actual data remains untouched.
+            </p>
+            <p style="margin-top: 16px; font-size: 13px; color: #333;">
+                🚀 <strong>Get the full picture at <a href="https://nuvu.dev" style="color: #4CAF50;">nuvu.dev</a></strong>
+            </p>
+            <p style="font-size: 11px; color: #555; margin: 8px auto 0; font-family: monospace; background: #f5f5f5; padding: 8px 12px; border-radius: 4px; display: inline-block;">
+                nuvu scan --provider aws <strong style="color: #4CAF50;">--push --api-key YOUR_KEY</strong>
+            </p>
+            <p style="font-size: 11px; color: #666; line-height: 1.6; max-width: 600px; margin: 12px auto 0;">
+                Stop burning money on forgotten resources • Playbooks to fix what matters first • Track who owns what • Prove compliance over time
             </p>
         </div>
     </div>
@@ -310,13 +319,11 @@ class HTMLFormatter:
             return ""
 
         html = """
-        <h2>💰 Cost Optimization Opportunities</h2>
+        <h2>📊 Resource Analysis</h2>
         """
 
         # Snapshot analysis - only manual snapshots are chargeable
         if snapshots:
-            manual_snapshot_cost = sum(a.cost_estimate_usd or 0 for a in manual_snapshots)
-            old_manual_cost = sum(a.cost_estimate_usd or 0 for a in old_manual_snapshots)
             manual_size = sum((a.size_bytes or 0) / (1024**4) for a in manual_snapshots)  # TB
 
             html += f"""
@@ -325,10 +332,8 @@ class HTMLFormatter:
             <ul>
                 <li><strong>Automated Snapshots:</strong> {len(auto_snapshots)} (included in cluster cost)</li>
                 <li><strong>Manual Snapshots:</strong> {len(manual_snapshots)} ({manual_size:.2f} TB)</li>
-                <li><strong>Manual Snapshot Cost:</strong> ${manual_snapshot_cost:,.2f}/mo</li>
-                <li><strong>Old Manual Snapshots (>90 days):</strong> {len(old_manual_snapshots)} (${old_manual_cost:,.2f}/mo potential savings)</li>
+                <li><strong>Old Manual Snapshots (>90 days):</strong> {len(old_manual_snapshots)}</li>
             </ul>
-            <p class="recommendation">💡 Review old manual snapshots - automated snapshots are retained per retention policy at no extra charge.</p>
         </div>
             """
 
@@ -366,26 +371,16 @@ class HTMLFormatter:
             </ul>
             """
 
-            if is_savings_opportunity:
-                # Reserved pricing typically saves 30-40% vs on-demand
-                html += f"""
-            <p class="recommendation">💰 <strong>Potential Savings:</strong> {uncovered_nodes} nodes running on-demand pricing. Reserved nodes typically offer 30-40% discount.</p>
-            """
-            else:
-                html += """
-            <p class="recommendation">✅ All provisioned nodes are covered by reservations.</p>
-            """
-
             # Show expiring reservations if any
             if expiring_reservations:
                 expiring_nodes = sum(
                     (a.usage_metrics or {}).get("node_count", 0) for a in expiring_reservations
                 )
                 html += f"""
-            <p class="recommendation">⚠️ <strong>{len(expiring_reservations)} reservations ({expiring_nodes} nodes) expiring soon.</strong> Plan for renewal to maintain coverage.</p>
+                <li><strong>Expiring Soon:</strong> {len(expiring_reservations)} reservations ({expiring_nodes} nodes)</li>
             """
 
-            html += "</div>"
+            html += "</ul></div>"
 
         return html
 
@@ -459,7 +454,7 @@ class HTMLFormatter:
             html += f"""
         <div class="insight-box alert">
             <h3>🔗 Cross-Account Data Shares ({len(cross_account_shares)})</h3>
-            <p>Data is being shared outside this AWS account. Review for security compliance.</p>
+            <p>Data is being shared outside this AWS account.</p>
             <table class="compact">
                 <tr><th>Share Name</th><th>Consumer Account</th><th>Flags</th></tr>
             """
@@ -473,8 +468,7 @@ class HTMLFormatter:
         if wlm_issues:
             html += f"""
         <div class="insight-box info">
-            <h3>⚡ WLM Configuration Review ({len(wlm_issues)} clusters)</h3>
-            <p>Some clusters may benefit from WLM tuning:</p>
+            <h3>⚡ WLM Configuration ({len(wlm_issues)} clusters)</h3>
             <ul>
             """
             for cluster in wlm_issues[:5]:
@@ -495,7 +489,7 @@ class HTMLFormatter:
         <div class="insight-box info">
             <h3>📊 Cluster Performance (Last 24h)</h3>
             <table class="compact">
-                <tr><th>Cluster</th><th>CPU Max</th><th>CPU Avg</th><th>Queries</th><th>Disk Used</th><th>Recommendation</th></tr>
+                <tr><th>Cluster</th><th>CPU Max</th><th>CPU Avg</th><th>Queries</th><th>Disk Used</th></tr>
             """
             for cluster in clusters_with_metrics[:10]:
                 metrics = cluster.usage_metrics or {}
@@ -503,11 +497,10 @@ class HTMLFormatter:
                 cpu_avg = metrics.get("cpu_utilization_avg_24h", 0)
                 queries = metrics.get("queries_completed_24h", 0)
                 disk = metrics.get("disk_space_used_percent", 0)
-                rec = metrics.get("performance_recommendation", "-")
                 html += (
                     f"<tr><td>{cluster.name}</td><td>{cpu_max:.1f}%</td>"
                     f"<td>{cpu_avg:.1f}%</td><td>{queries}</td>"
-                    f"<td>{disk:.1f}%</td><td>{rec if rec else '-'}</td></tr>"
+                    f"<td>{disk:.1f}%</td></tr>"
                 )
             html += "</table></div>"
 
@@ -521,7 +514,7 @@ class HTMLFormatter:
         <div class="insight-box info">
             <h3>🚀 Serverless Workgroup Utilization</h3>
             <table class="compact">
-                <tr><th>Workgroup</th><th>Base RPU</th><th>Max RPU (7d)</th><th>Avg RPU (7d)</th><th>Queries (24h)</th><th>Recommendation</th></tr>
+                <tr><th>Workgroup</th><th>Base RPU</th><th>Max RPU (7d)</th><th>Avg RPU (7d)</th><th>Queries (24h)</th></tr>
             """
             for wg in serverless_with_metrics[:10]:
                 metrics = wg.usage_metrics or {}
@@ -531,11 +524,10 @@ class HTMLFormatter:
                 queries = metrics.get("queries_completed_24h", 0) + metrics.get(
                     "queries_failed_24h", 0
                 )
-                rec = metrics.get("utilization_recommendation", "-")
                 html += (
                     f"<tr><td>{wg.name}</td><td>{base}</td>"
                     f"<td>{rpu_max:.1f}</td><td>{rpu_avg:.1f}</td>"
-                    f"<td>{queries}</td><td>{rec if rec else '-'}</td></tr>"
+                    f"<td>{queries}</td></tr>"
                 )
             html += "</table></div>"
 

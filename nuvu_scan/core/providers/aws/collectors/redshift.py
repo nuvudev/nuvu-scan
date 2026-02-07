@@ -301,9 +301,6 @@ class RedshiftCollector:
                                 "max_query_queue_time_ms": perf_metrics.get(
                                     "max_query_queue_time_ms"
                                 ),
-                                "performance_recommendation": perf_metrics.get(
-                                    "performance_recommendation"
-                                ),
                             },
                             cost_estimate_usd=monthly_cost,
                         )
@@ -473,9 +470,6 @@ class RedshiftCollector:
                                         "avg_query_duration_ms"
                                     ),
                                     # Recommendation
-                                    "utilization_recommendation": wg_metrics.get(
-                                        "utilization_recommendation"
-                                    ),
                                 },
                             )
                         )
@@ -754,7 +748,6 @@ class RedshiftCollector:
             "disk_space_used_percent": None,
             "avg_query_duration_ms": None,
             "max_query_queue_time_ms": None,
-            "performance_recommendation": None,
         }
 
         try:
@@ -825,19 +818,7 @@ class RedshiftCollector:
                 ) / len(datapoints)
                 metrics["max_query_queue_time_ms"] = max(dp.get("Maximum", 0) for dp in datapoints)
 
-            # Generate performance recommendation
-            if metrics["cpu_utilization_max_24h"] is not None:
-                max_cpu = metrics["cpu_utilization_max_24h"]
-                if max_cpu < 30:
-                    metrics["performance_recommendation"] = (
-                        f"Low CPU utilization (max {max_cpu:.0f}%). "
-                        f"Consider downsizing node type or reducing node count."
-                    )
-                elif max_cpu > 90:
-                    metrics["performance_recommendation"] = (
-                        f"High CPU utilization (max {max_cpu:.0f}%). "
-                        f"Consider upgrading node type or adding nodes."
-                    )
+            # Performance analysis based on CPU utilization is available in Nuvu Cloud
 
         except ClientError:
             pass
@@ -859,7 +840,6 @@ class RedshiftCollector:
             "max_query_queue_time_ms": None,
             "cpu_utilization_max_24h": None,
             "cpu_utilization_avg_24h": None,
-            "utilization_recommendation": None,
         }
 
         try:
@@ -949,17 +929,7 @@ class RedshiftCollector:
                     dp.get("Average", 0) for dp in datapoints
                 ) / len(datapoints)
 
-            # Generate recommendation based on utilization
-            if metrics["rpu_max_7d"] is not None:
-                max_rpu = metrics["rpu_max_7d"]
-                if max_rpu > 0:
-                    # If max RPU never exceeds 50% of base capacity, recommend reducing
-                    if metrics.get("rpu_avg_7d", 0) < max_rpu * 0.3:
-                        metrics["utilization_recommendation"] = (
-                            f"Low utilization: Max RPU {max_rpu:.0f}, "
-                            f"Avg RPU {metrics.get('rpu_avg_7d', 0):.0f}. "
-                            f"Consider reducing base capacity."
-                        )
+            # Utilization analysis is available in Nuvu Cloud
 
         except ClientError:
             pass  # Silently handle permission issues
