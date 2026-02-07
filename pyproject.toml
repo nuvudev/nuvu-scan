@@ -1,6 +1,6 @@
 [project]
 name = "nuvu-scan"
-version = "2.1.6"
+version = "2.1.7"
 description = "Multi-Cloud Data Asset Control - Discover, govern, and optimize your cloud data assets across AWS and GCP"
 readme = "README.md"
 requires-python = ">=3.10"

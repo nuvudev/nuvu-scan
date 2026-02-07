@@ -141,6 +141,45 @@ class TestHTMLFormatter:
         # Should show cost somewhere
         assert "cost" in output.lower() or "$" in output
 
+    def test_html_contains_privacy_message(self, sample_scan_result):
+        """Test that HTML contains the privacy/no-data-accessed message."""
+        formatter = HTMLFormatter()
+        output = formatter.format(sample_scan_result)
+
+        # Should contain privacy reassurance
+        assert "No data accessed" in output
+        assert "metadata" in output.lower()
+        assert "read-only" in output.lower()
+
+    def test_html_contains_nuvu_cloud_cta(self, sample_scan_result):
+        """Test that HTML contains Nuvu Cloud call-to-action."""
+        formatter = HTMLFormatter()
+        output = formatter.format(sample_scan_result)
+
+        # Should contain CTA with link
+        assert "nuvu.dev" in output.lower()
+        assert "--push" in output
+        assert "--api-key" in output
+
+    def test_html_no_remediation_recommendations(self, sample_scan_result):
+        """Test that HTML does not contain remediation recommendations."""
+        formatter = HTMLFormatter()
+        output = formatter.format(sample_scan_result)
+
+        # Should NOT contain recommendation language
+        assert "Consider downsizing" not in output
+        assert "Consider upgrading" not in output
+        assert "Plan for renewal" not in output
+        assert "Review for security compliance" not in output
+
+    def test_html_no_cost_optimization_title(self, sample_scan_result):
+        """Test that HTML does not use 'Cost Optimization Opportunities' title."""
+        formatter = HTMLFormatter()
+        output = formatter.format(sample_scan_result)
+
+        # Should NOT use the old savings-focused section title
+        assert "Cost Optimization Opportunities" not in output
+
 
 class TestCSVFormatter:
     """Test CSV formatter output."""
